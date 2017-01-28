@@ -1,0 +1,37 @@
+{
+  "name": "bfitech/zapchupload",
+  "description": "Server-side chunk upload.",
+  "type": "library",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Rendra Suroso",
+      "email": "rs@cogsci.bandungfe.net"
+    }
+  ],
+  "repositories": [
+    {
+      "type": "vcs",
+      "url": "git@bfinews.com:bfin/zapcore.git",
+      "minimum-stability": "dev"
+    },
+    {
+      "type": "vcs",
+      "url": "git@bfinews.com:bfin/zaplate.git",
+      "minimum-stability": "dev"
+    }
+  ],
+  "require": {
+    "php": ">=5.4.0"
+  },
+  "require-dev": {
+    "bfitech/zapcore": "dev-master",
+    "bfitech/zaplate": "dev-master",
+    "guzzlehttp/guzzle": "6.*"
+  },
+  "autoload": {
+    "psr-4": {
+      "BFITech\\ZapChupload\\": ""
+    }
+  }
+}

@@ -1,0 +1,11 @@
+
+*~
+*.swp
+*.log
+*.conf
+*.ini
+
+/vendor/
+/docs/
+/tests/htdocs-test/bower_components/
+
