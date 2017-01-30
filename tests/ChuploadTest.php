@@ -3,6 +3,7 @@
 
 use PHPUnit\Framework\TestCase;
 use GuzzleHttp\Client;
+use BFITech\ZapCoreDev;
 
 
 define('CHUNK_SIZE', 1024 * 10);
@@ -11,6 +12,8 @@ define('MAX_FILESIZE', 1024 * 500);
 class ChunkUploadTest extends TestCase {
 
 	public static $tdir = '/mnt/ramdisk';
+
+	public static $server_pid = null;
 
 	private $response;
 	private $code;
@@ -28,8 +31,7 @@ class ChunkUploadTest extends TestCase {
 	}
 
 	public static function generate_file($path, $size) {
-		$bs = 1024;
-		exec("dd if=/dev/urandom of=$path bs=$bs count=$size 2>/dev/null");
+		exec("dd if=/dev/urandom of=$path bs=1024 count=$size 2>/dev/null");
 	}
 
 	public static function make_chunk($file, $chunk_size, $index) {
@@ -61,6 +63,8 @@ class ChunkUploadTest extends TestCase {
 	}
 
 	public static function setUpBeforeClass() {
+		self::$server_pid = ZapCoreDev\CoreDev::server_up(
+			__DIR__ . '/htdocs-test');
 		foreach (self::file_list() as $file) {
 			if (!file_exists($file[0]))
 				self::generate_file($file[0], $file[1]);
@@ -70,6 +74,7 @@ class ChunkUploadTest extends TestCase {
 	public static function tearDownAfterClass() {
 		#foreach (self::file_list() as $file)
 		#	unlink($file[0]);
+		ZapCoreDev\CoreDev::server_down(self::$server_pid);
 	}
 
 	public static function client() {
