@@ -9,10 +9,11 @@ class ChunkUpload {
 
 	public static $core = null;
 
+	// make sure these are the same with client
 	private $post_prefix = '__chupload_';
-	// make sure this is the same with client
 	private $chunk_size = 1024 * 1024 * 100;
 	private $max_filesize = 1024 * 1024 * 1024 * 10;
+
 	private $with_fingerprint = false;
 
 	private $tempdir = null;
@@ -244,6 +245,10 @@ class ChunkUpload {
 		$chunk = fread($hi, $this->chunk_size);
 		fwrite($ho, $chunk);
 		return 0;
+	}
+
+	public function get_post_prefix() {
+		return $this->post_prefix;
 	}
 
 	public function get_chunk_size() {
