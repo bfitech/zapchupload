@@ -85,13 +85,26 @@ class ChunkUpload {
 	 * stripping EXIF tags. For longer processing, hide destdir
 	 * and process from there to avoid script timeout.
 	 *
-	 * @param string $path Path to tempname.
+	 * @param string $path Path to destination path.
+	 * @return bool|string $path False for failed post-processing,
+	 *     new destination path otherwise, which can be the same
+	 *     with input path. Changing path must be wrapped inside
+	 *     this method.
 	 */
 	protected function post_processing($path) {
 		// patch this
 		return $path;
 	}
 
+	/**
+	 * Print JSON.
+	 *
+	 * This is different from typical core JSON since it's
+	 * related to upload end status.
+	 *
+	 * @param int $errno Error number.
+	 * @param array $data Data.
+	 */
 	public static function json($errno, $data) {
 		if ($errno == 2 || $errno == 3)
 			# request error, constraint violation
@@ -212,6 +225,9 @@ class ChunkUpload {
 			}
 			$this->unlink($tempname);
 			$destname = $this->post_processing($destname);
+			if (!$destname)
+				# TODO: Test this.
+				return self::json(3, [8]);
 		}
 
 		return self::$core->print_json(0, [
