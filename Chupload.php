@@ -11,8 +11,8 @@ class ChunkUpload {
 
 	// make sure these are the same with client
 	private $post_prefix = '__chupload_';
-	private $chunk_size = 1024 * 1024 * 100;
-	private $max_filesize = 1024 * 1024 * 1024 * 10;
+	private $chunk_size = 1024 * 100;
+	private $max_filesize = 1024 * 1024 * 10;
 
 	private $with_fingerprint = false;
 
