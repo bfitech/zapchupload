@@ -25,13 +25,13 @@
     "php": ">=5.4.0"
   },
   "require-dev": {
-    "bfitech/zapcore": "dev-master",
-    "bfitech/zaplate": "dev-master",
+    "bfitech/zapcore": "1.0.*",
+    "bfitech/zaplate": "1.0.*",
     "guzzlehttp/guzzle": "6.*"
   },
   "autoload": {
     "psr-4": {
-      "BFITech\\ZapChupload\\": ""
+      "BFITech\\ZapChupload\\": "src"
     }
   },
   "autoload-dev": {
