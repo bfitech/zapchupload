@@ -4,6 +4,8 @@
 *.log
 *.conf
 *.ini
+*.orig
+*.bak
 
 /vendor/
 /docs/
