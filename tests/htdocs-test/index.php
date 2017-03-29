@@ -2,12 +2,12 @@
 
 
 require(__DIR__ . '/../../vendor/autoload.php');
-require(__DIR__ . '/config.php');
 
 use BFITech\ZapCore as zc;
 use BFITech\ZapTemplate as zt;
 use BFITech\ZapChupload as zu;
 
+define('TOPDIR', '/mnt/ramdisk/zapchupload-test');
 if (!is_dir(TOPDIR))
 	mkdir(TOPDIR, 0755);
 

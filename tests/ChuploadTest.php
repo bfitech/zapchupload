@@ -5,25 +5,13 @@ use PHPUnit\Framework\TestCase;
 use GuzzleHttp\Client;
 use BFITech\ZapCoreDev;
 
-$config_file = __DIR__ . '/htdocs-test/config.php';
-if (!is_file($config_file))
-	die(sprintf(
-		"ERROR: Configuration file '%s' doesn't exist.\n",
-		$config_file));
-require($config_file);
-foreach (['TOPDIR', 'TMPDIR'] as $dir) {
-	if (!defined($dir))
-		die(sprintf(
-			"ERROR: '%s' not set defined configuration file.\n",
-			$dir));
-}
 
 define('CHUNK_SIZE', 1024 * 10);
 define('MAX_FILESIZE', 1024 * 500);
 
 class ChunkUploadTest extends TestCase {
 
-	public static $tdir = TMPDIR;
+	public static $tdir = '/mnt/ramdisk';
 
 	public static $server_pid = null;
 
@@ -43,8 +31,6 @@ class ChunkUploadTest extends TestCase {
 	}
 
 	public static function generate_file($path, $size) {
-		if (!file_exists('/dev/urandom'))
-			die("ERROR: Only Un*x-like OS is supported.\n");
 		exec("dd if=/dev/urandom of=$path bs=1024 count=$size 2>/dev/null");
 	}
 

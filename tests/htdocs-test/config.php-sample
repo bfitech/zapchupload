@@ -1,5 +1,0 @@
-<?php
-
-define('TOPDIR', '/mnt/ramdisk/zapchupload-test');
-define('TMPDIR', '/mnt/ramdisk');
-
