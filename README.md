@@ -11,6 +11,23 @@ Server-side chunk uploader.
 
 ----
 
+Quick installation:
+
+```txt
+$ composer require bfitech/zapchupload
+```
+
+To see how it works with an AngularJS [module](https://github.com/bfitech/angular-chupload):
+
+```txt
+$ git clone git@github.com:bfitech/zapchupload.git
+$ cd zapchupload
+$ composer -vvv install -no
+$ bower install
+$ php -S 0.0.0.0:9999 -t tests/htdocs-test
+$ x-www-browser localhost:9999
+```
+
 Documentation available with:
 
 ```txt
