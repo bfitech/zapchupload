@@ -12,6 +12,9 @@
   "require": {
     "php": ">=5.5 || ~7.0"
   },
+  "suggest": {
+    "bfitech/zapcore": "Specifically-designed for this router although there's no explicit dependency."
+  },
   "require-dev": {
     "bfitech/zapcore": "~1.1",
     "bfitech/zaplate": "~1",
