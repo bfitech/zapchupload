@@ -2,6 +2,6 @@
   "name": "test",
   "private": true,
   "dependencies": {
-    "chupload": "git@bfinews.com:bfin/angular-chupload.git"
+    "angular-chupload": "^1"
   }
 }

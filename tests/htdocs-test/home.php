@@ -7,7 +7,7 @@
 <title>Uploader</title>
 <base href=/>
 <script src='/bower_components/angular/angular.min.js'></script>
-<script src='/bower_components/chupload/chupload.js'></script>
+<script src='/bower_components/angular-chupload/chupload.js'></script>
 <script type=text/javascript>
 (function(){
 	"use strict";
