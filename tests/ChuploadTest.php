@@ -11,8 +11,7 @@ define('MAX_FILESIZE', 1024 * 500);
 
 class ChunkUploadTest extends TestCase {
 
-	public static $tdir = '/mnt/ramdisk';
-
+	public static $tdir;
 	public static $server_pid = null;
 
 	private $response;
@@ -22,7 +21,9 @@ class ChunkUploadTest extends TestCase {
 	private $pfx = '__chupload_';
 
 	public static function file_list() {
-		$tdir = self::$tdir;
+		$tdir = self::$tdir = __DIR__ . '/htdocs-test/uploads';
+		if (!is_dir($tdir))
+			mkdir($tdir);
 		return [
 			[$tdir . '/zapchupload-test-1k.dat', 1],
 			[$tdir . '/zapchupload-test-200k.dat', 200],
@@ -65,6 +66,11 @@ class ChunkUploadTest extends TestCase {
 	public static function setUpBeforeClass() {
 		self::$server_pid = ZapCoreDev\CoreDev::server_up(
 			__DIR__ . '/htdocs-test');
+		if (!file_exists('/dev/urandom')) {
+			printf("ERROR: Cannot find '/dev/urandom'.\n");
+			printf("       Most likely your OS is not supported.\n");
+			exit(1);
+		}
 		foreach (self::file_list() as $file) {
 			if (!file_exists($file[0]))
 				self::generate_file($file[0], $file[1]);
