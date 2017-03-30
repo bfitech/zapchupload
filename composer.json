@@ -10,13 +10,10 @@
     }
   ],
   "require": {
-    "php": ">=5.5 || ~7.0"
-  },
-  "suggest": {
-    "bfitech/zapcore": "Specifically-designed for this router although there's no explicit dependency."
+    "php": ">=5.5 || ~7.0",
+    "bfitech/zapcore": "~1.1"
   },
   "require-dev": {
-    "bfitech/zapcore": "~1.1",
     "bfitech/zaplate": "~1",
     "phpunit/phpunit": "4.8.*",
     "guzzlehttp/guzzle": "6.*"

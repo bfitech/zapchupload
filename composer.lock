@@ -4,9 +4,8 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file",
         "This file is @generated automatically"
     ],
-    "content-hash": "31c1d833896d4b8df792be78af6263e7",
-    "packages": [],
-    "packages-dev": [
+    "content-hash": "c5c9b44b91b8d4692b9edd351f408a91",
+    "packages": [
         {
             "name": "bfitech/zapcore",
             "version": "1.1.1",
@@ -46,7 +45,9 @@
             ],
             "description": "A very simple router and other utils.",
             "time": "2017-03-28T23:12:21+00:00"
-        },
+        }
+    ],
+    "packages-dev": [
         {
             "name": "bfitech/zaplate",
             "version": "1.0.1",
