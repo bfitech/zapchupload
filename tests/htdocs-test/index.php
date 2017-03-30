@@ -14,7 +14,9 @@ if (!is_dir(TOPDIR))
 define('CHUNK_SIZE', 1024 * 10);
 define('MAX_FILESIZE', 1024 * 500);
 
-$core = new zc\Router();
+$logger = new zc\Logger(
+	zc\Logger::DEBUG, TOPDIR . '/zapchupload.log');
+$core = new zc\Router(null, null, true, $logger);
 
 class ChunkPostProcessed extends zu\ChunkUpload {
 	protected function check_fingerprint($fingerprint, $chunk) {
@@ -22,7 +24,7 @@ class ChunkPostProcessed extends zu\ChunkUpload {
 	}
 }
 
-$core->route('/', function($args) use($core) {
+$core->route('/', function($args) use($logger, $core) {
 	$get = $args['get'];
 	if (empty($get))
 		return (new zt\Template())->load(__DIR__ .'/home.php');
@@ -31,17 +33,17 @@ $core->route('/', function($args) use($core) {
 	$core->static_file(TOPDIR . '/data/' . $get['file']);
 });
 
-$core->route('/upload', function($args) use($core) {
+$core->route('/upload', function($args) use($logger, $core) {
 	$cu = new zu\ChunkUpload(
 		$core, TOPDIR . '/temp', TOPDIR . '/data',
-		null, CHUNK_SIZE, MAX_FILESIZE);
+		null, CHUNK_SIZE, MAX_FILESIZE, false, $logger);
 	$cu->upload($args);
 }, 'POST');
 
-$core->route('/upload_pp', function($args) use($core) {
+$core->route('/upload_pp', function($args) use($logger, $core) {
 	$cu = new ChunkPostProcessed(
 		$core, TOPDIR . '/temp', TOPDIR . '/data',
-		null, CHUNK_SIZE, MAX_FILESIZE, true);
+		null, CHUNK_SIZE, MAX_FILESIZE, true, $logger);
 	$cu->upload($args);
 }, 'POST');
 

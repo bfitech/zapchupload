@@ -13,6 +13,7 @@ class ChunkUploadTest extends TestCase {
 
 	public static $tdir;
 	public static $server_pid = null;
+	public static $logfile;
 
 	private $response;
 	private $code;
@@ -24,6 +25,7 @@ class ChunkUploadTest extends TestCase {
 		$tdir = self::$tdir = __DIR__ . '/htdocs-test/uploads';
 		if (!is_dir($tdir))
 			mkdir($tdir);
+		self::$logfile = $tdir . '/zapchupload.log';
 		return [
 			[$tdir . '/zapchupload-test-1k.dat', 1],
 			[$tdir . '/zapchupload-test-200k.dat', 200],
@@ -75,6 +77,8 @@ class ChunkUploadTest extends TestCase {
 			if (!file_exists($file[0]))
 				self::generate_file($file[0], $file[1]);
 		}
+		if (file_exists(self::$logfile))
+			@unlink(self::$logfile);
 	}
 
 	public static function tearDownAfterClass() {

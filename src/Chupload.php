@@ -3,6 +3,8 @@
 
 namespace BFITech\ZapChupload;
 
+use BFITech\ZapCore as zc;
+
 class ChunkUploadError extends \Exception {}
 
 
@@ -13,6 +15,8 @@ class ChunkUpload {
 
 	/** Core instance. */
 	public static $core = null;
+	/** Logger instance. */
+	public static $logger = null;
 
 	// make sure these are the same with client
 	private $post_prefix;
@@ -37,13 +41,20 @@ class ChunkUpload {
 	 * @param bool $with_fingerprint If true, fingerprint will
 	 *     be verified by $this->check_fingerprint() after each
 	 *     chunk upload is complete.
+	 * @param object|null $logger An instance of logging service.
+	 *     If left as null, default logger is used, implying
+	 *     error level and usage of STDERR.
 	 */
 	public function __construct(
 		$core, $tempdir, $destdir,
 		$post_prefix=null, $chunk_size=null, $max_filesize=null,
-		$with_fingerprint=false
+		$with_fingerprint=false, $logger=null
 	) {
 		self::$core = $core;
+
+		if (!$logger)
+			$logger = new zc\Logger();
+		self::$logger = $logger;
 
 		// defaults
 		$this->post_prefix = '__chupload_';
@@ -55,10 +66,18 @@ class ChunkUpload {
 		$this->with_fingerprint = (bool)$with_fingerprint;
 		if ($chunk_size) {
 			$chunk_size = (int)$chunk_size;
-			if ($chunk_size > 1024 * 1024 * 2)
+			if ($chunk_size > 1024 * 1024 * 2) {
+				$logger->warning(
+					"Chupload: chunk size exceed 2M. Default 2M is used.");
 				$chunk_size = null;
-			if ($chunk_size < 1024)
+			} elseif ($chunk_size < 1024) {
+				$logger->warning(
+					"Chupload: chunk size is less than 1k. Default 2M is used.");
 				$chunk_size = null;
+			} else {
+				$logger->debug(sprintf(
+					"Chupload: using chunk size: %s.", $chunk_size));
+			}
 		}
 		if ($chunk_size)
 			$this->chunk_size = $chunk_size;
@@ -67,27 +86,41 @@ class ChunkUpload {
 			$max_filesize = (int)$max_filesize;
 			$this->max_filesize = $max_filesize;
 		}
+		$logger->debug(sprintf(
+			"Chupload: using max filesize: %s.", $this->max_filesize));
 
-		if (!$tempdir || !$destdir)
-			throw new ChunkUploadError("Directories not set.");
+		if (!$tempdir || !$destdir) {
+			$errmsg = sprintf('%s not set.',
+				(!$tempdir ? 'Temporary' : 'Destination'));
+			$logger->error("Chupload: $errmsg");
+			throw new ChunkUploadError($errmsg);
+		}
 
-		if ($tempdir == $destdir)
-			throw new ChunkUploadError(
-				"Temporary and destination directories shan't be the same.");
+		if ($tempdir == $destdir) {
+			$errmsg = "Temp and destination dirs shan't be the same.";
+			$logger->error("Chupload: $errmsg");
+			throw new ChunkUploadError($errmsg);
+		}
 
 		if (!is_dir($tempdir)) {
-			if (!@mkdir($tempdir, 0755))
-				throw new ChunkUploadError(sprintf(
+			if (!@mkdir($tempdir, 0755)) {
+				$errmsg = sprintf(
 					"Cannot create temporary directory: '%s.'",
-					$tempdir));
+					$tempdir);
+				$logger->error("Chupload: $errmsg");
+				throw new ChunkUploadError($errmsg);
+			}
 		}
 		$this->tempdir = $tempdir;
 
 		if (!is_dir($destdir)) {
-			if (!@mkdir($destdir, 0755))
-				throw new ChunkUploadError(sprintf(
+			if (!@mkdir($destdir, 0755)) {
+				$errmsg = sprintf(
 					"Cannot create destination directory: '%s.'",
-					$destdir));
+					$destdir);
+				$logger->error("Chupload: $errmsg");
+				throw new ChunkUploadError($errmsg);
+			}
 		}
 		$this->destdir = $destdir;
 	}
@@ -155,9 +188,12 @@ class ChunkUpload {
 	}
 
 	private function unlink($file) {
-		if (!@unlink($file))
-			throw new ChunkUploadError(sprintf(
-				"Cannot delete '%s'.", $file));
+		if (!@unlink($file)) {
+			$errmsg = sprintf(
+				"Cannot delete temporary file: '%s'.", $file);
+			self::$logger->error("Chupload: $errmsg");
+			throw new ChunkUploadError($errmsg);
+		}
 	}
 
 	/**
@@ -170,9 +206,12 @@ class ChunkUpload {
 		$post = $args['post'];
 		$files = $args['files'];
 
-		if (!$files || !isset($files[$this->post_prefix . 'blob']))
+		if (!$files || !isset($files[$this->post_prefix . 'blob'])) {
 			# file field incomplete
+			self::$logger->warning(
+				"Chupload: chunk not received.");
 			return self::json(2, [0]);
+		}
 
 		$keys = ['name', 'size', 'index'];
 		if ($this->with_fingerprint)
@@ -181,38 +220,56 @@ class ChunkUpload {
 		$pfx = $this->post_prefix;
 
 		foreach($keys as $key) {
-			if (!isset($post[$pfx . $key]))
+			if (!isset($post[$pfx . $key])) {
 				# post field incomplete
+				self::$logger->warning(sprintf(
+					"Chupload: '%s' form data not received.",
+					$key));
 				return self::json(2, [1]);
+			}
 			$vals[$key] = $post[$pfx . $key];
 		}
 		extract($vals, EXTR_SKIP);
 
 		$size = intval($size);
-		if ($size < 1)
+		if ($size < 1) {
 			# size violation
+			self::$logger->warning("Chupload: invalid filesize.");
 			return self::json(3, [0]);
+		}
 		$index = intval($index);
-		if ($index < 0)
+		if ($index < 0) {
 			# index undersized
+			self::$logger->warning("Chupload: invalid chunk index.");
 			return self::json(3, [1]);
+		}
 		$max_chunk = floor($size / $this->chunk_size);
 
-		if ($size > $this->max_filesize)
+		if ($size > $this->max_filesize) {
 			# max size violation
+			self::$logger->warning(
+				"Chupload: max filesize violation.");
 			return self::json(3, [2]);
-		if ($index * $this->chunk_size > $this->max_filesize)
+		}
+		if ($index * $this->chunk_size > $this->max_filesize) {
 			# index oversized
+			self::$logger->warning(
+				"Chupload: chunk index violation.");
 			return self::json(3, [3]);
+		}
 
 		$blob = $args['files'][$pfx . 'blob'];
-		if ($blob['error'] !== 0)
+		if ($blob['error'] !== 0) {
 			# upload error
+			self::$logger->error("Chupload: upload error.");
 			return self::json(4, [0]);
+		}
 
 		$chunk_path = $blob['tmp_name'];
 		if (filesize($chunk_path) > $this->chunk_size) {
 			# chunk oversized
+			self::$logger->warning(
+				"Chupload: invalid chunk index.");
 			$this->unlink($chunk_path);
 			return self::json(3, [4]);
 		}
@@ -232,8 +289,12 @@ class ChunkUpload {
 		# truncate or append
 		if (false === $fn = @fopen(
 			$tempname, ($index === 0 ? 'wb' : 'ab'))
-		)
-			throw new ChunkUploadError("Cannot open '$tempname'.");
+		) {
+			$errmsg = sprintf(
+				"Cannot open temp file: '%s'.", $tempname);
+			self::$logger->error("Chupload: $errmsg");
+			throw new ChunkUploadError($errmsg);
+		}
 		fwrite($fn, $chunk);
 		# append index
 		if ($index < $max_chunk)
@@ -247,6 +308,8 @@ class ChunkUpload {
 			!$this->check_fingerprint($fingerprint, $chunk)
 		) {
 			# fingerprint violation
+			self::$logger->warning(
+				"Chupload: fingerprint doesn't match.");
 			$this->unlink($tempname);
 			return self::json(3, [5]);
 		}
@@ -259,19 +322,30 @@ class ChunkUpload {
 				# typically already caught by [3, [4]]
 				$this->unlink($destname);
 				$this->unlink($tempname);
-				if ($merge_status == 2)
+				if ($merge_status == 2) {
 					# max size violation
+					self::$logger->warning(
+						"Chupload: max filesize violation.");
 					return self::json(3, [6]);
+				}
 				# index order error
+				self::$logger->warning(
+					"Chupload: broken chunk ordering.");
 				return self::json(3, [7]);
 			}
 			$this->unlink($tempname);
 			$destname = $this->post_processing($destname);
-			if (!$destname)
-				# TODO: Test this.
+			if (!$destname) {
+				/** @todo Test post-processing result. */
+				self::$logger->error(
+					"Chupload: post-processing failed.");
 				return self::json(3, [8]);
+			}
 		}
 
+		self::$logger->info(sprintf(
+			"Chupload: file successfully uploaded: '%s'.",
+			$basename));
 		return self::$core->print_json(0, [
 			'path' => $basename,
 			'index'  => $index,
@@ -280,8 +354,12 @@ class ChunkUpload {
 
 	private function merge_chunks($tempname, $destname, $max_chunk) {
 		$hi = fopen($tempname, 'rb');
-		if (false === $ho = @fopen($destname, 'wb'))
-			throw new ChunkUploadError("Cannot open '$destname'.");
+		if (false === $ho = @fopen($destname, 'wb')) {
+			$errmsg = sprintf("Cannot open destination: '%s'.",
+				$destname);
+			self::$logger->error("Chupload: $errmsg");
+			throw new ChunkUploadError($errmsg);
+		}
 		$total = 0;
 		if ($max_chunk == 0) {
 			$chunk = fread($hi, $this->chunk_size);
