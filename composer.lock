@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file",
         "This file is @generated automatically"
     ],
-    "content-hash": "c5c9b44b91b8d4692b9edd351f408a91",
+    "content-hash": "9b1095283dfa257a1e3504bc59093fe0",
     "packages": [
         {
             "name": "bfitech/zapcore",
-            "version": "1.1.1",
+            "version": "dev-master",
             "source": {
                 "type": "git",
                 "url": "https://github.com/bfitech/zapcore.git",
-                "reference": "339686ae8cb74dbb7abb93856a48d6312e87a4b4"
+                "reference": "94fd349a682c9ce4a652fb829aa7546196966385"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/bfitech/zapcore/zipball/339686ae8cb74dbb7abb93856a48d6312e87a4b4",
-                "reference": "339686ae8cb74dbb7abb93856a48d6312e87a4b4",
+                "url": "https://api.github.com/repos/bfitech/zapcore/zipball/94fd349a682c9ce4a652fb829aa7546196966385",
+                "reference": "94fd349a682c9ce4a652fb829aa7546196966385",
                 "shasum": ""
             },
             "require": {
@@ -44,7 +44,7 @@
                 }
             ],
             "description": "A very simple router and other utils.",
-            "time": "2017-03-28T23:12:21+00:00"
+            "time": "2017-04-03 23:20:20"
         }
     ],
     "packages-dev": [
@@ -1432,9 +1432,18 @@
             "time": "2016-11-23T20:04:58+00:00"
         }
     ],
-    "aliases": [],
+    "aliases": [
+        {
+            "alias": "1.1.x-dev",
+            "alias_normalized": "1.1.9999999.9999999-dev",
+            "version": "9999999-dev",
+            "package": "bfitech/zapcore"
+        }
+    ],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {
+        "bfitech/zapcore": 20
+    },
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
