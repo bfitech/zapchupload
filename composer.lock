@@ -4,11 +4,11 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file",
         "This file is @generated automatically"
     ],
-    "content-hash": "9b1095283dfa257a1e3504bc59093fe0",
+    "content-hash": "bcc2fe85d023bbeaf8edd02fd3d873c2",
     "packages": [
         {
             "name": "bfitech/zapcore",
-            "version": "dev-master",
+            "version": "1.2.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/bfitech/zapcore.git",
@@ -44,7 +44,7 @@
                 }
             ],
             "description": "A very simple router and other utils.",
-            "time": "2017-04-06 00:34:58"
+            "time": "2017-04-06T00:34:58+00:00"
         }
     ],
     "packages-dev": [
@@ -1432,18 +1432,9 @@
             "time": "2016-11-23T20:04:58+00:00"
         }
     ],
-    "aliases": [
-        {
-            "alias": "1.1.x-dev",
-            "alias_normalized": "1.1.9999999.9999999-dev",
-            "version": "9999999-dev",
-            "package": "bfitech/zapcore"
-        }
-    ],
+    "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {
-        "bfitech/zapcore": 20
-    },
+    "stability-flags": [],
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
