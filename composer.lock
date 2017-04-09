@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file",
         "This file is @generated automatically"
     ],
-    "content-hash": "bcc2fe85d023bbeaf8edd02fd3d873c2",
+    "content-hash": "bbab9a599574e14bb3dbdaa774fbdcee",
     "packages": [
         {
             "name": "bfitech/zapcore",
-            "version": "1.2.0",
+            "version": "1.3.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/bfitech/zapcore.git",
-                "reference": "da3119fae7c6e2769767aae59511610ab6e37d57"
+                "reference": "374747582a2f2476276ad5da1ddfbfdc87c60148"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/bfitech/zapcore/zipball/da3119fae7c6e2769767aae59511610ab6e37d57",
-                "reference": "da3119fae7c6e2769767aae59511610ab6e37d57",
+                "url": "https://api.github.com/repos/bfitech/zapcore/zipball/374747582a2f2476276ad5da1ddfbfdc87c60148",
+                "reference": "374747582a2f2476276ad5da1ddfbfdc87c60148",
                 "shasum": ""
             },
             "require": {
@@ -44,22 +44,22 @@
                 }
             ],
             "description": "A very simple router and other utils.",
-            "time": "2017-04-06T00:34:58+00:00"
+            "time": "2017-04-09T02:19:21+00:00"
         }
     ],
     "packages-dev": [
         {
             "name": "bfitech/zaplate",
-            "version": "1.0.1",
+            "version": "1.2.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/bfitech/zaplate.git",
-                "reference": "6059646aa0b2f226b123ee58de9971da3adb3ba8"
+                "reference": "fe924cff539cc0c878e3a12f89b65de87de78b90"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/bfitech/zaplate/zipball/6059646aa0b2f226b123ee58de9971da3adb3ba8",
-                "reference": "6059646aa0b2f226b123ee58de9971da3adb3ba8",
+                "url": "https://api.github.com/repos/bfitech/zaplate/zipball/fe924cff539cc0c878e3a12f89b65de87de78b90",
+                "reference": "fe924cff539cc0c878e3a12f89b65de87de78b90",
                 "shasum": ""
             },
             "require": {
@@ -85,7 +85,7 @@
                 }
             ],
             "description": "A pseudo-template engine.",
-            "time": "2017-03-29T11:33:15+00:00"
+            "time": "2017-04-06T10:20:49+00:00"
         },
         {
             "name": "doctrine/instantiator",
