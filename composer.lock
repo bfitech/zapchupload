@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file",
         "This file is @generated automatically"
     ],
-    "content-hash": "bbab9a599574e14bb3dbdaa774fbdcee",
+    "content-hash": "d80f5567db9d3c6e850ce0a934b2b894",
     "packages": [
         {
             "name": "bfitech/zapcore",
