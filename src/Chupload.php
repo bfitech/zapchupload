@@ -3,9 +3,8 @@
 
 namespace BFITech\ZapChupload;
 
-use BFITech\ZapCore as zc;
-
-class ChunkUploadError extends \Exception {}
+use BFITech\ZapCore\Router;
+use BFITech\ZapCore\Logger;
 
 
 /**
@@ -46,14 +45,14 @@ class ChunkUpload {
 	 *     error level and usage of STDERR.
 	 */
 	public function __construct(
-		$core, $tempdir, $destdir,
+		Router $core, $tempdir, $destdir,
 		$post_prefix=null, $chunk_size=null, $max_filesize=null,
-		$with_fingerprint=false, $logger=null
+		$with_fingerprint=false, Logger $logger=null
 	) {
 		self::$core = $core;
 
 		if (!$logger)
-			$logger = new zc\Logger();
+			$logger = new Logger();
 		self::$logger = $logger;
 
 		// defaults
@@ -102,27 +101,19 @@ class ChunkUpload {
 			throw new ChunkUploadError($errmsg);
 		}
 
-		if (!is_dir($tempdir)) {
-			if (!@mkdir($tempdir, 0755)) {
+		foreach ([
+			'tempdir' => $tempdir,
+			'destdir' => $destdir,
+		] as $dname => $dpath) {
+			if (!is_dir($dpath) && !@mkdir($dpath, 0755)) {
 				$errmsg = sprintf(
-					"Cannot create temporary directory: '%s.'",
-					$tempdir);
+					"Cannot create %s directory: '%s.'",
+					$dname, $dpath);
 				$logger->error("Chupload: $errmsg");
 				throw new ChunkUploadError($errmsg);
 			}
+			$this->$dname = $dpath;
 		}
-		$this->tempdir = $tempdir;
-
-		if (!is_dir($destdir)) {
-			if (!@mkdir($destdir, 0755)) {
-				$errmsg = sprintf(
-					"Cannot create destination directory: '%s.'",
-					$destdir);
-				$logger->error("Chupload: $errmsg");
-				throw new ChunkUploadError($errmsg);
-			}
-		}
-		$this->destdir = $destdir;
 	}
 
 	/**
@@ -134,6 +125,7 @@ class ChunkUpload {
 	 * @param string $chunk_received Received chunk.
 	 * @return bool True if fingerprint matches, false otherwise.
 	 *     Unmatched fingerprint will halt remaining chunk uploads.
+	 * @codeCoverageIgnore
 	 */
 	protected function check_fingerprint($fingerprint, $chunk_received) {
 		// patch this
@@ -142,6 +134,9 @@ class ChunkUpload {
 
 	/**
 	 * Default basename generator.
+	 *
+	 * @param string $path Path to a file.
+	 * @codeCoverageIgnore
 	 */
 	protected function get_basename($path) {
 		// patch this
@@ -160,6 +155,7 @@ class ChunkUpload {
 	 *     destination path otherwise, which can be the same with
 	 *     input path. Changing path must be wrapped inside this
 	 *     method.
+	 * @codeCoverageIgnore
 	 */
 	protected function post_processing($path) {
 		// patch this
@@ -176,17 +172,25 @@ class ChunkUpload {
 	 * @param array $data Data.
 	 */
 	public static function json($errno, $data) {
-		if ($errno == 2 || $errno == 3)
-			# request error, constraint violation
+		$Err = new ChunkUploadError;
+
+		$http_code = 200;
+		if (in_array($errno, [
+			$Err::EREQ,
+			$Err::ECST,
+		]))
 			$http_code = 403;
-		elseif ($errno == 4 || $errno == 5)
-			# upload error, I/O error
+		elseif (in_array($errno, [
+			$Err::EUPL,
+			$Err::EDIO,
+		]))
 			$http_code = 503;
-		else
-			$http_code = 200;
-		return self::$core->print_json($errno, $data, $http_code);
+		self::$core->print_json($errno, $data, $http_code);
 	}
 
+	/*
+	 * Safely unlink file.
+	 */
 	private function unlink($file) {
 		if (!@unlink($file)) {
 			$errmsg = sprintf(
@@ -202,6 +206,7 @@ class ChunkUpload {
 	 * @param array $args ZapCore arguments.
 	 */
 	public function upload($args) {
+		$Err = new ChunkUploadError;
 
 		$post = $args['post'];
 		$files = $args['files'];
@@ -210,7 +215,7 @@ class ChunkUpload {
 			# file field incomplete
 			self::$logger->warning(
 				"Chupload: chunk not received.");
-			return self::json(2, [0]);
+			return self::json($Err::EREQ, [$Err::EREQ_NO_CHUNK]);
 		}
 
 		$keys = ['name', 'size', 'index'];
@@ -225,7 +230,8 @@ class ChunkUpload {
 				self::$logger->warning(sprintf(
 					"Chupload: '%s' form data not received.",
 					$key));
-				return self::json(2, [1]);
+				return self::json(
+					$Err::EREQ, [$Err::EREQ_DATA_INCOMPLETE]);
 			}
 			$vals[$key] = $post[$pfx . $key];
 		}
@@ -235,13 +241,14 @@ class ChunkUpload {
 		if ($size < 1) {
 			# size violation
 			self::$logger->warning("Chupload: invalid filesize.");
-			return self::json(3, [0]);
+			return self::json($Err::ECST, [$Err::ECST_FSZ_INVALID]);
 		}
 		$index = intval($index);
 		if ($index < 0) {
 			# index undersized
 			self::$logger->warning("Chupload: invalid chunk index.");
-			return self::json(3, [1]);
+			return self::json(
+				$Err::ECST, [$Err::ECST_CID_UNDERSIZED]);
 		}
 		$max_chunk = floor($size / $this->chunk_size);
 
@@ -249,20 +256,21 @@ class ChunkUpload {
 			# max size violation
 			self::$logger->warning(
 				"Chupload: max filesize violation.");
-			return self::json(3, [2]);
+			return self::json($Err::ECST, [$Err::ECST_FSZ_OVERSIZED]);
 		}
 		if ($index * $this->chunk_size > $this->max_filesize) {
 			# index oversized
 			self::$logger->warning(
 				"Chupload: chunk index violation.");
-			return self::json(3, [3]);
+			return self::json($Err::ECST, [$Err::ECST_CID_OVERSIZED]);
 		}
 
 		$blob = $args['files'][$pfx . 'blob'];
 		if ($blob['error'] !== 0) {
-			# upload error
-			self::$logger->error("Chupload: upload error.");
-			return self::json(4, [0]);
+			# upload generic error
+			self::$logger->error(sprintf(
+				"Chupload: upload error: %s.", $blob['errno']));
+			return self::json($Err::EUPL, [$blob['errno']]);
 		}
 
 		$chunk_path = $blob['tmp_name'];
@@ -271,7 +279,7 @@ class ChunkUpload {
 			self::$logger->warning(
 				"Chupload: invalid chunk index.");
 			$this->unlink($chunk_path);
-			return self::json(3, [4]);
+			return self::json($Err::ECST, [$Err::ECST_CID_INVALID]);
 		}
 
 		$chunk = file_get_contents($chunk_path);
@@ -293,7 +301,8 @@ class ChunkUpload {
 			$errmsg = sprintf(
 				"Cannot open temp file: '%s'.", $tempname);
 			self::$logger->error("Chupload: $errmsg");
-			throw new ChunkUploadError($errmsg);
+			return self::json($Err::EDIO, []);
+			#throw new ChunkUploadError($errmsg);
 		}
 		fwrite($fn, $chunk);
 		# append index
@@ -311,7 +320,7 @@ class ChunkUpload {
 			self::$logger->warning(
 				"Chupload: fingerprint doesn't match.");
 			$this->unlink($tempname);
-			return self::json(3, [5]);
+			return self::json($Err::ECST, [$Err::ECST_FGP_INVALID]);
 		}
 
 		// check size on finish
@@ -326,12 +335,14 @@ class ChunkUpload {
 					# max size violation
 					self::$logger->warning(
 						"Chupload: max filesize violation.");
-					return self::json(3, [6]);
+					return self::json(
+						$Err::ECST, [$Err::ECST_MCH_OVERSIZED]);
 				}
 				# index order error
 				self::$logger->warning(
 					"Chupload: broken chunk ordering.");
-				return self::json(3, [7]);
+				return self::json(
+					$Err::ECST, [$Err::ECST_MCH_UNORDERED]);
 			}
 			$this->unlink($tempname);
 			$destname = $this->post_processing($destname);
@@ -339,7 +350,8 @@ class ChunkUpload {
 				/** @todo Test post-processing result. */
 				self::$logger->error(
 					"Chupload: post-processing failed.");
-				return self::json(3, [8]);
+				return self::json(
+					$Err::ECST, [$Err::ECST_POSTPROC_FAIL]);
 			}
 		}
 
