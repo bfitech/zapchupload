@@ -4,7 +4,9 @@
 require_once(__DIR__ . '/ChuploadFixture.php');
 
 
+use BFITech\ZapCore\Common;
 use BFITech\ZapCoreDev\CoreDev;
+use BFITech\ZapChupload\ChunkUploadError as Err;
 use GuzzleHttp\Client;
 
 class ChunkUploadHTTPTest extends ChunkUploadFixture {
@@ -52,13 +54,14 @@ class ChunkUploadHTTPTest extends ChunkUploadFixture {
 
 	public function POST($path, $data=[]) {
 		$post = [];
-		foreach ($data as $d) {
-			$part = [
-				'name' => $this->pfx . $d[0],
-				'contents' => $d[1],
-			];
-			if (isset($d[2]))
-				$part['filename'] = $d[2];
+		foreach ($data as $key => $val) {
+			$part = ['name' => $this->pfx. $key];
+			if ($key == 'blob') {
+				$part['contents'] = $val[0];
+				$part['filename'] = $val[1];
+			} else {
+				$part['contents'] = $val;
+			}
 			$post[] = $part;
 		}
 		$response = self::client()->request('POST', $path, [
@@ -85,26 +88,30 @@ class ChunkUploadHTTPTest extends ChunkUploadFixture {
 	}
 
 	public function test_simple_upload() {
+
 		$this->POST('/upload', ['size' => 2]);
 		$this->assertEquals($this->code, 403);
-		$this->assertEquals($this->body->errno, 2);
-		$this->assertEquals($this->body->data[0], 0);
+		$this->assertEquals($this->body->errno,
+			Err::EREQ);
+		$this->assertEquals($this->body->data[0],
+			Err::EREQ_NO_CHUNK);
 
 		$str = (string)rand();
 		$post = [
-			['name', 'testpost.dat'],
-			['size', strlen($str)],
-			['blob', $str, 'testpost.dat'],
+			'name' => 'testpost.dat',
+			'size' => strlen($str),
+			'blob' => [$str, 'testpost.dat'],
 		];
 		$this->POST('/upload', $post);
 		$this->assertEquals($this->code, 403);
-		$this->assertEquals($this->body->errno, 2);
-		$this->assertEquals($this->body->data[0], 1);
+		$this->assertEquals($this->body->errno,
+			Err::EREQ);
+		$this->assertEquals($this->body->data[0],
+			Err::EREQ_DATA_INCOMPLETE);
 
-		$post[] = ['index', 0];
+		$post['index'] = 0;
 		$this->POST('/upload', $post);
 		$this->assertEquals($this->code, 200);
-		$this->assertEquals($this->body->errno, 0);
 		$this->assertEquals($this->body->data->path, 'testpost.dat');
 		$this->assertEquals($this->body->data->index, 0);
 
@@ -131,8 +138,10 @@ class ChunkUploadHTTPTest extends ChunkUploadFixture {
 			$this->POST('/upload', $post);
 			if ($this->code !== 200) {
 				$this->assertEquals($this->code, 403);
-				$this->assertEquals($this->body->errno, 3);
-				$this->assertEquals($this->body->data[0], 2);
+				$this->assertEquals($this->body->errno,
+					Err::ECST);
+				$this->assertEquals($this->body->data[0],
+					Err::ECST_FSZ_OVERSIZED);
 			}
 		});
 	}
@@ -140,31 +149,30 @@ class ChunkUploadHTTPTest extends ChunkUploadFixture {
 	public function test_chunk_upload_index_invalid() {
 		$files = self::file_list();
 		self::upload_chunks($files[1][0], CHUNK_SIZE, function($post) {
-			$post = array_map(function($p){
-				if ($p[0] == 'index') {
-					$p[1] += 1;
-				}
-				return $p;
-			}, $post);
+			$post['index']++;
 			$this->POST('/upload', $post);
 			if ($this->code !== 200) {
 				$this->assertEquals($this->code, 403);
-				$this->assertEquals($this->body->errno, 3);
-				$this->assertEquals($this->body->data[0], 5);
+				$this->assertEquals($this->body->errno,
+					Err::ECST);
+				$this->assertEquals($this->body->data[0],
+					Err::ECST_MCH_UNORDERED);
 			}
 		});
 		self::upload_chunks($files[1][0], CHUNK_SIZE, function($post) {
-			$post = array_map(function($p){
-				if ($p[0] == 'index' && $p[1] == 3) {
-					$p[1] = 1000;
-				}
-				return $p;
-			}, $post);
+			if ($post['index'] == 3)
+				$post['index'] = 1000;
 			$this->POST('/upload', $post);
 			if ($this->code !== 200) {
 				$this->assertEquals($this->code, 403);
-				$this->assertEquals($this->body->errno, 3);
-				$this->assertEquals($this->body->data[0], 3);
+				$this->assertEquals($this->body->errno,
+					Err::ECST);
+				$this->assertTrue(in_array($this->body->data[0],
+					[
+						Err::ECST_CID_OVERSIZED,   # on packing
+						Err::ECST_MCH_UNORDERED,   # on merging
+					]
+				));
 			}
 		});
 	}
@@ -176,26 +184,35 @@ class ChunkUploadHTTPTest extends ChunkUploadFixture {
 			$this->POST('/upload', $post);
 			if ($this->code !== 200) {
 				$this->assertEquals($this->code, 403);
-				$this->assertEquals($this->body->errno, 3);
-				$this->assertEquals($this->body->data[0], 7);
+				$this->assertEquals($this->body->errno,
+					Err::ECST);
+				$this->assertEquals($this->body->data[0],
+					Err::ECST_MCH_UNORDERED);
 			}
 		});
 		self::upload_chunks($files[1][0], CHUNK_SIZE + 1, function($post) {
 			$this->POST('/upload', $post);
 			if ($this->code !== 200) {
 				$this->assertEquals($this->code, 403);
-				$this->assertEquals($this->body->errno, 3);
-				$this->assertEquals($this->body->data[0], 6);
+				$this->assertEquals($this->body->errno, Err::ECST);
+				$this->assertTrue(in_array($this->body->data[0],
+					[
+						Err::ECST_MCH_OVERSIZED,   # on packing
+						Err::ECST_MCH_UNORDERED,   # on merging
+					]
+				));
 			}
 		});
 		# broken chunk size received
 		self::upload_chunks($files[1][0], CHUNK_SIZE, function($post) {
-			$post[2][1] .= pack('v', 1);
+			$post['blob'][0] .= pack('v', 1);
 			$this->POST('/upload', $post);
 			if ($this->code !== 200) {
 				$this->assertEquals($this->code, 403);
-				$this->assertEquals($this->body->errno, 3);
-				$this->assertEquals($this->body->data[0], 6);
+				$this->assertEquals($this->body->errno,
+					Err::ECST);
+				$this->assertEquals($this->body->data[0],
+					Err::ECST_MCH_OVERSIZED);
 			}
 		});
 	}
@@ -206,25 +223,29 @@ class ChunkUploadHTTPTest extends ChunkUploadFixture {
 		self::upload_chunks($files[1][0], CHUNK_SIZE, function($post) {
 			$this->POST('/upload_pp', $post);
 			$this->assertEquals($this->code, 403);
-			$this->assertEquals($this->body->errno, 2);
-			$this->assertEquals($this->body->data[0], 1);
+			$this->assertEquals($this->body->errno,
+				Err::EREQ);
+			$this->assertEquals($this->body->data[0],
+				Err::EREQ_DATA_INCOMPLETE);
 		});
 		# fingerprint ok
 		self::upload_chunks($files[1][0], CHUNK_SIZE, function($post) {
-			$blob = $post[2][1];
-			$post[] = ['fingerprint', hash('sha256', $blob)];
+			$blob = $post['blob'][0];
+			$post['fingerprint'] = hash('sha256', $blob);
 			$this->POST('/upload_pp', $post);
 			$this->assertEquals($this->code, 200);
 		});
 		# fingerprint bonkers
 		self::upload_chunks($files[1][0], CHUNK_SIZE, function($post) {
-			$blob = $post[2][1];
-			$post[] = ['fingerprint', hash('sha256', $blob . ' ')];
+			$blob = $post['blob'][0];
+			$post['fingerprint'] = hash('sha256', $blob . ' ');
 			$this->POST('/upload_pp', $post);
 			if ($this->code !== 200) {
 				$this->assertEquals($this->code, 403);
-				$this->assertEquals($this->body->errno, 3);
-				$this->assertEquals($this->body->data[0], 5);
+				$this->assertEquals($this->body->errno,
+					Err::ECST);
+				$this->assertEquals($this->body->data[0],
+					Err::ECST_FGP_INVALID);
 			}
 		});
 	}
