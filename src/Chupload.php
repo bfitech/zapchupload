@@ -62,16 +62,18 @@ class ChunkUpload {
 
 		if ($post_prefix !== null)
 			$this->post_prefix = (string)$post_prefix;
+
 		$this->with_fingerprint = (bool)$with_fingerprint;
+
 		if ($chunk_size) {
 			$chunk_size = (int)$chunk_size;
 			if ($chunk_size > 1024 * 1024 * 2) {
 				$logger->warning(
-					"Chupload: chunk size exceed 2M. Default 2M is used.");
+					"Chupload: chunk size > 2M. Default 2M is used.");
 				$chunk_size = null;
 			} elseif ($chunk_size < 1024) {
 				$logger->warning(
-					"Chupload: chunk size is less than 1k. Default 2M is used.");
+					"Chupload: chunk size < 1k. Default 2M is used.");
 				$chunk_size = null;
 			} else {
 				$logger->debug(sprintf(
@@ -83,8 +85,15 @@ class ChunkUpload {
 
 		if ($max_filesize) {
 			$max_filesize = (int)$max_filesize;
-			$this->max_filesize = $max_filesize;
+			if ($max_filesize < $this->chunk_size) {
+				$logger->warning(
+					"Chupload: max filesize < chunk size. ".
+					"Default 10M is used.");
+			} else {
+				$this->max_filesize = $max_filesize;
+			}
 		}
+
 		$logger->debug(sprintf(
 			"Chupload: using max filesize: %s.", $this->max_filesize));
 
@@ -178,26 +187,29 @@ class ChunkUpload {
 		if (in_array($errno, [
 			$Err::EREQ,
 			$Err::ECST,
-		]))
+		])) {
 			$http_code = 403;
-		elseif (in_array($errno, [
+		} elseif (in_array($errno, [
 			$Err::EUPL,
 			$Err::EDIO,
-		]))
+		])) {
 			$http_code = 503;
+		}
 		self::$core->print_json($errno, $data, $http_code);
 	}
 
-	/*
+	/**
 	 * Safely unlink file.
+	 *
+	 * @codeCoverageIgnore
 	 */
 	private function unlink($file) {
-		if (!@unlink($file)) {
-			$errmsg = sprintf(
-				"Cannot delete temporary file: '%s'.", $file);
-			self::$logger->error("Chupload: $errmsg");
-			throw new ChunkUploadError($errmsg);
-		}
+		if (@unlink($file))
+			return true;
+		self::$logger->error(sprintf(
+			"Chupload: Cannot delete file: '%s'.", $file));
+		return false;
+		#throw new ChunkUploadError($errmsg);
 	}
 
 	/**
@@ -267,10 +279,10 @@ class ChunkUpload {
 
 		$blob = $args['files'][$pfx . 'blob'];
 		if ($blob['error'] !== 0) {
-			# upload generic error
+			# generic upload error
 			self::$logger->error(sprintf(
-				"Chupload: upload error: %s.", $blob['errno']));
-			return self::json($Err::EUPL, [$blob['errno']]);
+				"Chupload: upload error: %s.", $blob['error']));
+			return self::json($Err::EUPL, [$blob['error']]);
 		}
 
 		$chunk_path = $blob['tmp_name'];
@@ -279,7 +291,7 @@ class ChunkUpload {
 			self::$logger->warning(
 				"Chupload: invalid chunk index.");
 			$this->unlink($chunk_path);
-			return self::json($Err::ECST, [$Err::ECST_CID_INVALID]);
+			return self::json($Err::ECST, [$Err::ECST_MCH_OVERSIZED]);
 		}
 
 		$chunk = file_get_contents($chunk_path);
@@ -288,22 +300,26 @@ class ChunkUpload {
 		$tempname = $this->tempdir . '/' . $basename;
 		$destname = $this->destdir . '/' . $basename;
 
-		if (file_exists($destname)) {
-			# always overwrite old file with the same name, hence
-			# make sure get_basename() guarantee uniqueness
-			$this->unlink($destname);
-		}
+		# always overwrite old file with the same name, hence
+		# make sure get_basename() guarantee uniqueness
+		// @codeCoverageIgnoreStart
+		if (file_exists($destname) && !$this->unlink($destname))
+			return self::json($Err::EDIO, []);
+		// @codeCoverageIgnoreEnd
 
+		// pack chunk
 		# truncate or append
 		if (false === $fn = @fopen(
 			$tempname, ($index === 0 ? 'wb' : 'ab'))
 		) {
+			// @codeCoverageIgnoreStart
 			$errmsg = sprintf(
 				"Cannot open temp file: '%s'.", $tempname);
 			self::$logger->error("Chupload: $errmsg");
 			return self::json($Err::EDIO, []);
-			#throw new ChunkUploadError($errmsg);
+			// @codeCoverageIgnoreEnd
 		}
+		# write to temp blob
 		fwrite($fn, $chunk);
 		# append index
 		if ($index < $max_chunk)
@@ -312,6 +328,7 @@ class ChunkUpload {
 		# remove chunk
 		$this->unlink($chunk_path);
 
+		// fingerprint check
 		if (
 			$this->with_fingerprint &&
 			!$this->check_fingerprint($fingerprint, $chunk)
@@ -323,31 +340,19 @@ class ChunkUpload {
 			return self::json($Err::ECST, [$Err::ECST_FGP_INVALID]);
 		}
 
-		// check size on finish
+		// merge chunks on finish
 		if ($max_chunk == $index) {
 			$merge_status = $this->merge_chunks(
 				$tempname, $destname, $max_chunk);
 			if ($merge_status !== 0) {
-				# typically already caught by [3, [4]]
 				$this->unlink($destname);
 				$this->unlink($tempname);
-				if ($merge_status == 2) {
-					# max size violation
-					self::$logger->warning(
-						"Chupload: max filesize violation.");
-					return self::json(
-						$Err::ECST, [$Err::ECST_MCH_OVERSIZED]);
-				}
-				# index order error
-				self::$logger->warning(
-					"Chupload: broken chunk ordering.");
-				return self::json(
-					$Err::ECST, [$Err::ECST_MCH_UNORDERED]);
+				self::$logger->warning("Chupload: broken chunk.");
+				return self::json($merge_status[0], $merge_status[1]);
 			}
 			$this->unlink($tempname);
 			$destname = $this->post_processing($destname);
 			if (!$destname) {
-				/** @todo Test post-processing result. */
 				self::$logger->error(
 					"Chupload: post-processing failed.");
 				return self::json(
@@ -355,9 +360,9 @@ class ChunkUpload {
 			}
 		}
 
-		self::$logger->info(sprintf(
-			"Chupload: file successfully uploaded: '%s'.",
-			$basename));
+		// success
+		self::$logger->info(
+			"Chupload: file successfully uploaded: '$basename'.");
 		return self::$core->print_json(0, [
 			'path' => $basename,
 			'index'  => $index,
@@ -365,33 +370,41 @@ class ChunkUpload {
 	}
 
 	private function merge_chunks($tempname, $destname, $max_chunk) {
-		$hi = fopen($tempname, 'rb');
-		if (false === $ho = @fopen($destname, 'wb')) {
-			$errmsg = sprintf("Cannot open destination: '%s'.",
-				$destname);
+		$Err = new ChunkUploadError;
+		if (
+			false === ($hi = @fopen($tempname, 'rb')) ||
+			false === ($ho = @fopen($destname, 'wb'))
+		) {
+			// @codeCoverageIgnoreStart
+			$errmsg = sprintf(
+				"Cannot open files for merging: '%s' -> '%s'.",
+				$tempname, $destname);
 			self::$logger->error("Chupload: $errmsg");
-			throw new ChunkUploadError($errmsg);
+			return [$Err::EDIO, []];
+			// @codeCoverageIgnoreEnd
 		}
-		$total = 0;
 		if ($max_chunk == 0) {
+			# single or last chunk
 			$chunk = fread($hi, $this->chunk_size);
-			if (strlen($chunk) > $this->max_filesize)
-				return 2;
+			if (filesize($tempname) > $this->chunk_size)
+				return [$Err::ECST, [$Err::ECST_MCH_OVERSIZED]];
 			fwrite($ho, $chunk);
 			return 0;
 		}
+		$total = 0;
 		for ($i=0; $i<$max_chunk; $i++) {
 			$chunk = fread($hi, $this->chunk_size);
-			$total += strlen($chunk);
+			$total += $this->chunk_size;
 			if ($total > $this->max_filesize)
-				return 2;
+				return [$Err::ECST, [$Err::ECST_FSZ_INVALID]];
 			fwrite($ho, $chunk);
-			$i_unpack = unpack('vint', fread($hi, 2))['int'];
+			$tail = fread($hi, 2);
+			if (strlen($tail) < 2)
+				return [$Err::ECST, [$Err::ECST_MCH_UNORDERED]];
+			$i_unpack = unpack('vint', $tail)['int'];
 			if ($i !== $i_unpack)
-				return 1;
+				return [$Err::ECST, [$Err::ECST_MCH_UNORDERED]];
 		}
-		$chunk = fread($hi, $this->chunk_size);
-		fwrite($ho, $chunk);
 		return 0;
 	}
 

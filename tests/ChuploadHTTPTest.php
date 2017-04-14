@@ -1,7 +1,7 @@
 <?php
 
 
-require_once(__DIR__ . '/ChunkFixture.php');
+require_once(__DIR__ . '/ChuploadFixture.php');
 
 
 use BFITech\ZapCoreDev\CoreDev;
@@ -185,7 +185,7 @@ class ChunkUploadHTTPTest extends ChunkUploadFixture {
 			if ($this->code !== 200) {
 				$this->assertEquals($this->code, 403);
 				$this->assertEquals($this->body->errno, 3);
-				$this->assertEquals($this->body->data[0], 4);
+				$this->assertEquals($this->body->data[0], 6);
 			}
 		});
 		# broken chunk size received
@@ -195,7 +195,7 @@ class ChunkUploadHTTPTest extends ChunkUploadFixture {
 			if ($this->code !== 200) {
 				$this->assertEquals($this->code, 403);
 				$this->assertEquals($this->body->errno, 3);
-				$this->assertEquals($this->body->data[0], 4);
+				$this->assertEquals($this->body->data[0], 6);
 			}
 		});
 	}
