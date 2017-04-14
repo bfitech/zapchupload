@@ -48,17 +48,16 @@ class ChunkUploadFixture extends TestCase {
 
 	public static function upload_chunks($file, $chunk_size, $callback) {
 		$size = filesize($file);
-		$max_chunk = floor($size / $chunk_size);
 		$index = 0;
 		while (true) {
 			$chunk = self::make_chunk($file, $chunk_size, $index);
 			if (!$chunk)
 				break;
 			$post = [
-				['name', basename($file)],
-				['size', $size],
-				['blob', $chunk , basename($file)],
-				['index', $index]
+				'index' => $index,
+				'name' => basename($file),
+				'size' => $size,
+				'blob' => [$chunk , basename($file)],
 			];
 			$index++;
 			$callback($post);

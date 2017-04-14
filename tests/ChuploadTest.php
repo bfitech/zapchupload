@@ -114,6 +114,12 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		$this->assertEquals(
 			$chup->get_max_filesize(), MAX_FILESIZE);
 
+		$chup = new ChunkUploadPatched(
+			$core, $tdir . '/xtemp', $tdir . '/xdest',
+			'_some_pfx', CHUNK_SIZE, CHUNK_SIZE - 1,
+			true, $logger
+		);
+
 		try {
 			$chup = new ChunkUploadPatched(
 				$core, '', '',
@@ -267,48 +273,41 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		$this->assertEquals($core::$errno, $Err::ECST);
 		$this->assertEquals($core::$data, [$Err::ECST_FGP_INVALID]);
 
-		# chunk comes not in correct order
+		# chunk size gets too big
 		## fake a chunk from mid sample
-		file_put_contents($fake_chunk,
-			substr(file_get_contents($this->file_list()[1][0]),
-			0, CHUNK_SIZE));
+		$content = substr(file_get_contents($this->file_list()[1][0]),
+			0, CHUNK_SIZE + 1);
+		file_put_contents($fake_chunk, $content);
 		$_POST['__testsize'] = filesize($fake_chunk);
-		$_POST['__testindex'] = 1;
-		$_POST['__testfingerprint'] = ChunkUploadPatched::get_fingerprint(
-			file_get_contents($fake_chunk));
+		$_POST['__testindex'] = 4;
+		$_POST['__testfingerprint'] = $chup::get_fingerprint($content);
 		$chup = $this->make_uploader(true);
 		$core = $chup::$core;
 		$core->route('/', [$chup, 'upload'], 'POST');
 		$this->assertEquals($core::$errno, $Err::ECST);
-		$this->assertEquals($core::$data, [$Err::ECST_MCH_UNORDERED]);
+		$this->assertEquals($core::$data, [$Err::ECST_MCH_OVERSIZED]);
 
 	}
 
-	private function format_chunk($chunkdata, $fname) {
+	private function format_chunk($chunkdata, $callback) {
 		$this->reset_env();
-		$idxs = array_map(function($ele) {
-			return $ele[1];
-		}, array_filter($chunkdata, function($ele){
-			return $ele[0] == 'index';
-		}));
-		foreach ($idxs as $idxv) {
-			$idx = $idxv;
-			break;
-		}
-		foreach ($chunkdata as $cdat) {
-			$key = '__test' . $cdat[0];
-			if ($cdat[0] == 'blob') {
-				$ftmp = sprintf('%s/.%s-%s', dirname($fname),
-					basename($fname), $idx);
-				file_put_contents($ftmp, $cdat[1]);
-				$_FILES[$key] = [
+		$i = 0;
+		foreach ($chunkdata as $key => $val) {
+			if ($key == 'blob') {
+				$base = $val[1];
+				$ftmp = sprintf('%s/.%s-%s', self::$tdir . '/xtemp',
+					$base, $i);
+				file_put_contents($ftmp, $val[0]);
+				$_FILES['__test' . $key] = [
 					'error' => 0,
 					'tmp_name' => $ftmp,
 				];
 			} else {
-				$_POST[$key] = $cdat[1];
+				$_POST['__test' . $key] = $val;
 			}
+			$i++;
 		}
+		$callback();
 	}
 
 	public function test_upload() {
@@ -318,51 +317,87 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		# single-chunk file
 		$fname = $fls[0][0];
 		$this->upload_chunks(
-			$fname, CHUNK_SIZE,
-			function($chunkdata) use($fname, $Err)
+			$fname, CHUNK_SIZE, function($chunkdata)
 		{
-			$this->format_chunk($chunkdata, $fname);
-			$chup = $this->make_uploader();
-			$core = $chup::$core;
-			$core->route('/', [$chup, 'upload'], 'POST');
-			$this->assertEquals($core::$errno, 0);
+			$this->format_chunk($chunkdata, function(){
+				$chup = $this->make_uploader();
+				$core = $chup::$core;
+				$core->route('/', [$chup, 'upload'], 'POST');
+				$this->assertEquals($core::$errno, 0);
+			});
 		});
+		$dname = self::$tdir . '/xdest/' . basename($fname);
 		$this->assertEquals(
-			sha1(file_get_contents($fname)), 
-			sha1(file_get_contents(
-				self::$tdir . '/xdest/' . basename($fname))));
+			sha1(file_get_contents($fname)),
+			sha1(file_get_contents($dname)));
 
 		# multi-chunk file
 		$fname = $fls[1][0];
 		$this->upload_chunks(
-			$fname, CHUNK_SIZE,
-			function($chunkdata) use($fname, $Err)
+			$fname, CHUNK_SIZE, function($chunkdata)
 		{
-			$this->format_chunk($chunkdata, $fname);
-			$chup = $this->make_uploader();
-			$core = $chup::$core;
-			$core->route('/', [$chup, 'upload'], 'POST');
-			$this->assertEquals($core::$errno, 0);
+			$this->format_chunk($chunkdata, function(){
+				$chup = $this->make_uploader();
+				$core = $chup::$core;
+				$core->route('/', [$chup, 'upload'], 'POST');
+				$this->assertEquals($core::$errno, 0);
+			});
 		});
-		#$this->assertEquals(
-		#	sha1(file_get_contents($fname)), 
-		#	sha1(file_get_contents(
-		#		self::$tdir . '/xdest/' . basename($fname))));
+		$dname = self::$tdir . '/xdest/' . basename($fname);
+		$this->assertEquals(
+			sha1(file_get_contents($fname)),
+			sha1(file_get_contents($dname)));
 
 		# fail post-proc
 		$fname = $fls[0][0];
 		$this->upload_chunks(
-			$fname, CHUNK_SIZE,
-			function($chunkdata) use($fname, $Err)
+			$fname, CHUNK_SIZE, function($chunkdata) use($Err)
 		{
-			$this->format_chunk($chunkdata, $fname);
-			$chup = $this->make_uploader(false, true);
-			$core = $chup::$core;
-			$core->route('/', [$chup, 'upload'], 'POST');
-			$this->assertEquals($core::$errno, $Err::ECST);
-			$this->assertEquals($core::$data, [
-				$Err::ECST_POSTPROC_FAIL]);
+			$this->format_chunk($chunkdata, function() use($Err){
+				$chup = $this->make_uploader(false, true);
+				$core = $chup::$core;
+				$core->route('/', [$chup, 'upload'], 'POST');
+				if ($core::$errno !== 0) {
+					$this->assertEquals($core::$errno,
+						$Err::ECST);
+					$this->assertEquals($core::$data[0],
+						$Err::ECST_POSTPROC_FAIL);
+				}
+			});
 		});
+		$dname = self::$tdir . '/xdest/' . basename($fname);
+		$this->assertFalse(file_exists($dname));
+
+		# multi-chunk file with messed up order
+		# @note When index sequence is messed up, upload goes on. It's
+		#     the unpacker that will invalidate it.
+		$fname = $fls[1][0];
+		$this->upload_chunks(
+			$fname, CHUNK_SIZE, function($chunkdata) use($fname, $Err)
+		{
+			$this->format_chunk($chunkdata, function() use($fname, $Err){
+				$faulty = false;
+				if ($_POST['__testindex'] == 1) {
+					$_POST['__testindex'] = 10;
+				}
+				if ($_POST['__testindex'] == floor(
+					filesize($fname) / CHUNK_SIZE) - 1)
+				{
+					$faulty = true;
+				}
+				$chup = $this->make_uploader();
+				$core = $chup::$core;
+				$core->route('/', [$chup, 'upload'], 'POST');
+				if ($faulty) {
+					$this->assertEquals($core::$errno, $Err::ECST);
+					$this->assertEquals($core::$data[0],
+						$Err::ECST_MCH_UNORDERED);
+				}
+			});
+		});
+		$dname = self::$tdir . '/xdest/' . basename($fname);
+		$this->assertFalse(file_exists($dname));
+
 	}
 
 }

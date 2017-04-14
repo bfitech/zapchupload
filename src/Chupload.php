@@ -145,7 +145,6 @@ class ChunkUpload {
 	 * Default basename generator.
 	 *
 	 * @param string $path Path to a file.
-	 * @codeCoverageIgnore
 	 */
 	protected function get_basename($path) {
 		// patch this
@@ -164,24 +163,23 @@ class ChunkUpload {
 	 *     destination path otherwise, which can be the same with
 	 *     input path. Changing path must be wrapped inside this
 	 *     method.
-	 * @codeCoverageIgnore
 	 */
 	protected function post_processing($path) {
-		// patch this
 		return $path;
 	}
 
 	/**
 	 * Print JSON.
 	 *
-	 * This is different from typical core JSON since it's
-	 * related to upload end status.
+	 * This is different from typical core JSON since it's related to
+	 * upload end status.
 	 *
-	 * @param int $errno Error number.
-	 * @param array $data Data.
+	 * @param array $resp Array with values: 0 := `errno`, 1 := `data`.
 	 */
-	public static function json($errno, $data) {
+	public static function json($resp) {
 		$Err = new ChunkUploadError;
+		$errno = $resp[0];
+		$data = isset($resp[1]) ? $resp[1] : [];
 
 		$http_code = 200;
 		if (in_array($errno, [
@@ -206,28 +204,25 @@ class ChunkUpload {
 	private function unlink($file) {
 		if (@unlink($file))
 			return true;
-		self::$logger->error(sprintf(
-			"Chupload: Cannot delete file: '%s'.", $file));
+		self::$logger->error(
+			"Chupload: Cannot delete file: '$file'.");
 		return false;
-		#throw new ChunkUploadError($errmsg);
 	}
 
 	/**
-	 * Uploader.
-	 *
-	 * @param array $args ZapCore arguments.
+	 * Verify request.
 	 */
-	public function upload($args) {
+	private function upload_check_request($args) {
 		$Err = new ChunkUploadError;
+		$logger = self::$logger;
 
 		$post = $args['post'];
 		$files = $args['files'];
 
 		if (!$files || !isset($files[$this->post_prefix . 'blob'])) {
 			# file field incomplete
-			self::$logger->warning(
-				"Chupload: chunk not received.");
-			return self::json($Err::EREQ, [$Err::EREQ_NO_CHUNK]);
+			$logger->warning("Chupload: chunk not received.");
+			return [$Err::EREQ, [$Err::EREQ_NO_CHUNK]];
 		}
 
 		$keys = ['name', 'size', 'index'];
@@ -239,60 +234,66 @@ class ChunkUpload {
 		foreach($keys as $key) {
 			if (!isset($post[$pfx . $key])) {
 				# post field incomplete
-				self::$logger->warning(sprintf(
-					"Chupload: '%s' form data not received.",
-					$key));
-				return self::json(
-					$Err::EREQ, [$Err::EREQ_DATA_INCOMPLETE]);
+				$logger->warning(
+					"Chupload: '$key' form data not received.");
+				return [$Err::EREQ, [$Err::EREQ_DATA_INCOMPLETE]];
 			}
 			$vals[$key] = $post[$pfx . $key];
 		}
-		extract($vals, EXTR_SKIP);
+
+		$blob = $files[$pfx . 'blob'];
+		if ($blob['error'] !== 0) {
+			# generic upload error
+			$logger->error("Chupload: upload error: {$blob['error']}.");
+			return [$Err::EUPL, [$blob['error']]];
+		}
+		$vals['blob'] = $blob;
+
+		return [0, $vals];
+	}
+
+	/**
+	 * Verifiy new chunk.
+	 */
+	private function upload_check_constraints($request) {
+		$Err = new ChunkUploadError;
+		$logger = self::$logger;
+		extract($request, EXTR_SKIP);
 
 		$size = intval($size);
 		if ($size < 1) {
 			# size violation
-			self::$logger->warning("Chupload: invalid filesize.");
-			return self::json($Err::ECST, [$Err::ECST_FSZ_INVALID]);
+			$logger->warning("Chupload: invalid filesize.");
+			return [$Err::ECST, [$Err::ECST_FSZ_INVALID]];
 		}
 		$index = intval($index);
 		if ($index < 0) {
 			# index undersized
-			self::$logger->warning("Chupload: invalid chunk index.");
-			return self::json(
-				$Err::ECST, [$Err::ECST_CID_UNDERSIZED]);
+			$logger->warning("Chupload: invalid chunk index.");
+			return [$Err::ECST, [$Err::ECST_CID_UNDERSIZED]];
 		}
-		$max_chunk = floor($size / $this->chunk_size);
-
 		if ($size > $this->max_filesize) {
 			# max size violation
-			self::$logger->warning(
-				"Chupload: max filesize violation.");
-			return self::json($Err::ECST, [$Err::ECST_FSZ_OVERSIZED]);
+			$logger->warning("Chupload: max filesize violation.");
+			return [$Err::ECST, [$Err::ECST_FSZ_OVERSIZED]];
 		}
 		if ($index * $this->chunk_size > $this->max_filesize) {
 			# index oversized
-			self::$logger->warning(
-				"Chupload: chunk index violation.");
-			return self::json($Err::ECST, [$Err::ECST_CID_OVERSIZED]);
+			$logger->warning("Chupload: chunk index violation.");
+			return [$Err::ECST, [$Err::ECST_CID_OVERSIZED]];
 		}
-
-		$blob = $args['files'][$pfx . 'blob'];
-		if ($blob['error'] !== 0) {
-			# generic upload error
-			self::$logger->error(sprintf(
-				"Chupload: upload error: %s.", $blob['error']));
-			return self::json($Err::EUPL, [$blob['error']]);
-		}
-
 		$chunk_path = $blob['tmp_name'];
 		if (filesize($chunk_path) > $this->chunk_size) {
 			# chunk oversized
-			self::$logger->warning(
-				"Chupload: invalid chunk index.");
+			$logger->warning("Chupload: invalid chunk index.");
 			$this->unlink($chunk_path);
-			return self::json($Err::ECST, [$Err::ECST_MCH_OVERSIZED]);
+			return [$Err::ECST, [$Err::ECST_MCH_OVERSIZED]];
 		}
+
+		$max_chunk_s = $size / $this->chunk_size;
+		$max_chunk = floor($max_chunk_s);
+		if ($max_chunk_s == $max_chunk)
+			$max_chunk--;
 
 		$chunk = file_get_contents($chunk_path);
 
@@ -304,72 +305,53 @@ class ChunkUpload {
 		# make sure get_basename() guarantee uniqueness
 		// @codeCoverageIgnoreStart
 		if (file_exists($destname) && !$this->unlink($destname))
-			return self::json($Err::EDIO, []);
+			return [$Err::EDIO, []];
 		// @codeCoverageIgnoreEnd
 
-		// pack chunk
+		return [0, [
+			'size' => $size,
+			'index' => $index,
+			'chunk_path' => $chunk_path,
+			'max_chunk' => $max_chunk,
+			'chunk' => $chunk,
+			'basename' => $basename,
+			'tempname' => $tempname,
+			'destname' => $destname,
+		]];
+	}
+
+	/**
+	 * Append new chunk to packed chunks.
+	 */
+	private function upload_pack_chunk($constraints) {
+		$Err = new ChunkUploadError;
+		extract($constraints, EXTR_SKIP);
+
 		# truncate or append
-		if (false === $fn = @fopen(
-			$tempname, ($index === 0 ? 'wb' : 'ab'))
-		) {
+		$fn = @fopen($tempname, ($index === 0 ? 'wb' : 'ab'));
+		if (false === $fn) {
 			// @codeCoverageIgnoreStart
-			$errmsg = sprintf(
-				"Cannot open temp file: '%s'.", $tempname);
-			self::$logger->error("Chupload: $errmsg");
-			return self::json($Err::EDIO, []);
+			self::$logger->error(
+				"Chupload: cannot open temp file: '%s'.", $tempname);
+			return [$Err::EDIO, []];
 			// @codeCoverageIgnoreEnd
 		}
 		# write to temp blob
 		fwrite($fn, $chunk);
 		# append index
-		if ($index < $max_chunk)
+		if ($index < $max_chunk && $max_chunk > 1)
 			fwrite($fn, pack('v', $index));
 		fclose($fn);
 		# remove chunk
 		$this->unlink($chunk_path);
 
-		// fingerprint check
-		if (
-			$this->with_fingerprint &&
-			!$this->check_fingerprint($fingerprint, $chunk)
-		) {
-			# fingerprint violation
-			self::$logger->warning(
-				"Chupload: fingerprint doesn't match.");
-			$this->unlink($tempname);
-			return self::json($Err::ECST, [$Err::ECST_FGP_INVALID]);
-		}
-
-		// merge chunks on finish
-		if ($max_chunk == $index) {
-			$merge_status = $this->merge_chunks(
-				$tempname, $destname, $max_chunk);
-			if ($merge_status !== 0) {
-				$this->unlink($destname);
-				$this->unlink($tempname);
-				self::$logger->warning("Chupload: broken chunk.");
-				return self::json($merge_status[0], $merge_status[1]);
-			}
-			$this->unlink($tempname);
-			$destname = $this->post_processing($destname);
-			if (!$destname) {
-				self::$logger->error(
-					"Chupload: post-processing failed.");
-				return self::json(
-					$Err::ECST, [$Err::ECST_POSTPROC_FAIL]);
-			}
-		}
-
-		// success
-		self::$logger->info(
-			"Chupload: file successfully uploaded: '$basename'.");
-		return self::$core->print_json(0, [
-			'path' => $basename,
-			'index'  => $index,
-		]);
+		return [0];
 	}
 
-	private function merge_chunks($tempname, $destname, $max_chunk) {
+	/**
+	 * Merge packed chunks to destination.
+	 */
+	private function upload_merge_chunks($tempname, $destname, $max_chunk) {
 		$Err = new ChunkUploadError;
 		if (
 			false === ($hi = @fopen($tempname, 'rb')) ||
@@ -389,7 +371,7 @@ class ChunkUpload {
 			if (filesize($tempname) > $this->chunk_size)
 				return [$Err::ECST, [$Err::ECST_MCH_OVERSIZED]];
 			fwrite($ho, $chunk);
-			return 0;
+			return [0];
 		}
 		$total = 0;
 		for ($i=0; $i<$max_chunk; $i++) {
@@ -405,7 +387,76 @@ class ChunkUpload {
 			if ($i !== $i_unpack)
 				return [$Err::ECST, [$Err::ECST_MCH_UNORDERED]];
 		}
-		return 0;
+		$chunk = fread($hi, $this->chunk_size);
+		fwrite($ho, $chunk);
+		return [0];
+	}
+
+	/**
+	 * Uploader.
+	 *
+	 * @param dict $args ZapCore router arguments.
+	 */
+	public function upload($args) {
+		$Err = new ChunkUploadError;
+		$logger = self::$logger;
+
+		$request = $this->upload_check_request($args);
+		if ($request[0] !== 0)
+			return self::json($request);
+		extract($request[1], EXTR_SKIP);
+
+		$constraints = $this->upload_check_constraints($request[1]);
+		if ($constraints[0] !== 0)
+			return self::json($constraints);
+		extract($constraints[1], EXTR_SKIP);
+
+		$packed = $this->upload_pack_chunk($constraints[1]);
+		if ($packed[0] !== 0)
+			return self::json($packed);
+
+		// fingerprint check
+		if (
+			$this->with_fingerprint &&
+			!$this->check_fingerprint($fingerprint, $chunk)
+		) {
+			# fingerprint violation
+			$logger->warning("Chupload: fingerprint doesn't match.");
+			$this->unlink($tempname);
+			return self::json([$Err::ECST, [$Err::ECST_FGP_INVALID]]);
+		}
+
+		// merge chunks on finish
+		if ($max_chunk == $index) {
+
+			$merge_status = $this->upload_merge_chunks(
+				$tempname, $destname, $max_chunk);
+			if ($merge_status[0] !== 0) {
+				$this->unlink($destname);
+				$this->unlink($tempname);
+				$logger->warning("Chupload: broken chunk.");
+				return self::json($merge_status);
+			}
+			$this->unlink($tempname);
+
+			$postproc_destname = $this->post_processing($destname);
+			if (!$postproc_destname) {
+				if (file_exists($destname))
+					$this->unlink($destname);
+				$logger->error("Chupload: post-processing failed.");
+				return self::json(
+					[$Err::ECST, [$Err::ECST_POSTPROC_FAIL]]);
+			}
+
+		}
+
+		// success
+		$logger->info(
+			"Chupload: file successfully uploaded: '$basename'.");
+		return self::json([0, [
+			'path' => $basename,
+			'index'  => $index,
+		]]);
 	}
 
 	/**
