@@ -6,6 +6,7 @@
 *.ini
 *.orig
 *.bak
+composer.lock
 
 /vendor/
 /docs/

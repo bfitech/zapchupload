@@ -4,6 +4,9 @@
 namespace BFITech\ZapChupload;
 
 
+/**
+ * Chupload exception.
+ */
 class ChunkUploadError extends \Exception {
 
 	/** Request error. */
@@ -20,21 +23,21 @@ class ChunkUploadError extends \Exception {
 	/** Incomplete data. */
 	const EREQ_DATA_INCOMPLETE = 0x01;
 
-	/* Invalid filesize. */
+	/** Invalid filesize. */
 	const ECST_FSZ_INVALID = 0x00;
-	/* Chunk index < 0. */
+	/** Chunk index < 0. */
 	const ECST_CID_UNDERSIZED = 0x01;
-	/* Excessive filesize. */
+	/** Excessive filesize. */
 	const ECST_FSZ_OVERSIZED = 0x02;
-	/* Chunk index too big. */
+	/** Chunk index too big. */
 	const ECST_CID_OVERSIZED = 0x03;
-	/* Chunk index too big. */
+	/** Chunk index too big. */
 	const ECST_CID_INVALID = 0x04;
-	/* Chunk fingerprint invalid. */
+	/** Chunk fingerprint invalid. */
 	const ECST_FGP_INVALID = 0x05;
-	/* Merged chunk exceeds max filesize. */
+	/** Merged chunk exceeds max filesize. */
 	const ECST_MCH_OVERSIZED = 0x06;
-	/* Messed up chunk order. */
+	/** Messed up chunk order. */
 	const ECST_MCH_UNORDERED = 0x07;
 	/** Post-proc failed. */
 	const ECST_POSTPROC_FAIL = 0x08;

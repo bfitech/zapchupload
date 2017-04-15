@@ -76,8 +76,8 @@ class ChunkUpload {
 					"Chupload: chunk size < 1k. Default 2M is used.");
 				$chunk_size = null;
 			} else {
-				$logger->debug(sprintf(
-					"Chupload: using chunk size: %s.", $chunk_size));
+				$logger->debug(
+					"Chupload: using chunk size: $chunk_size.");
 			}
 		}
 		if ($chunk_size)
