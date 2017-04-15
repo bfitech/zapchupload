@@ -4,7 +4,6 @@
 require_once(__DIR__ . '/ChuploadFixture.php');
 
 
-use BFITech\ZapCore\Common;
 use BFITech\ZapCoreDev\CoreDev;
 use BFITech\ZapChupload\ChunkUploadError as Err;
 use GuzzleHttp\Client;
