@@ -136,8 +136,9 @@ class ChunkUpload {
 	 *     Unmatched fingerprint will halt remaining chunk uploads.
 	 * @codeCoverageIgnore
 	 */
-	protected function check_fingerprint($fingerprint, $chunk_received) {
-		// patch this
+	protected function check_fingerprint(
+		$fingerprint, $chunk_received
+	) {
 		return true;
 	}
 
@@ -351,7 +352,9 @@ class ChunkUpload {
 	/**
 	 * Merge packed chunks to destination.
 	 */
-	private function upload_merge_chunks($tempname, $destname, $max_chunk) {
+	private function upload_merge_chunks(
+		$tempname, $destname, $max_chunk
+	) {
 		$Err = new ChunkUploadError;
 		if (
 			false === ($hi = @fopen($tempname, 'rb')) ||
@@ -481,4 +484,3 @@ class ChunkUpload {
 	}
 
 }
-

@@ -4,42 +4,11 @@
 require_once(__DIR__ . '/ChuploadFixture.php');
 
 
-use BFITech\ZapCore as zc;
+use BFITech\ZapCore\Logger;
+use BFITech\ZapCoreDev\RouterDev;
 use BFITech\ZapChupload\ChunkUpload;
 use BFITech\ZapChupload\ChunkUploadError;
 
-
-class RouterPatched extends zc\Router {
-
-	public static $code = 200;
-	public static $head = [];
-	public static $body = null;
-
-	public static $errno = 0;
-	public static $data = [];
-
-	public static function header($header_string, $replace=false) {
-		if (strpos($header_string, 'HTTP/1') !== false) {
-			self::$code = explode(' ', $header_string)[1];
-		} else {
-			self::$head[] = $header_string;
-		}
-	}
-
-	public static function halt($arg=null) {
-		if (!$arg)
-			return;
-		echo $arg;
-	}
-
-	public function wrap_callback($callback, $args=[]) {
-		ob_start();
-		$callback($args);
-		self::$body = json_decode(ob_get_clean(), true);
-		self::$errno = self::$body['errno'];
-		self::$data = self::$body['data'];
-	}
-}
 
 class ChunkUploadPatched extends ChunkUpload {
 
@@ -54,6 +23,7 @@ class ChunkUploadPatched extends ChunkUpload {
 	public function check_fingerprint($fingerprint, $chunk_recv) {
 		return $fingerprint === $this->make_fingerprint($chunk_recv);
 	}
+
 }
 
 class ChunkUploadPostProc extends ChunkUploadPatched {
@@ -61,6 +31,7 @@ class ChunkUploadPostProc extends ChunkUploadPatched {
 	public function post_processing($path) {
 		return false;
 	}
+
 }
 
 class ChunkUploadTest extends ChunkUploadFixture {
@@ -78,8 +49,8 @@ class ChunkUploadTest extends ChunkUploadFixture {
 
 	public function test_constructor() {
 
-		$logger = new zc\Logger(zc\Logger::ERROR, self::$logfile);
-		$core = new RouterPatched(null, null, false, $logger);
+		$logger = new Logger(Logger::ERROR, self::$logfile);
+		$core = (new RouterDev)->config('logger', $logger);
 		$tdir = self::$tdir;
 		$Err = new ChunkUploadError;
 
@@ -126,7 +97,8 @@ class ChunkUploadTest extends ChunkUploadFixture {
 				'_some_pfx', CHUNK_SIZE, MAX_FILESIZE,
 				true, $logger
 			);
-		} catch(ChunkUploadError $e) {}
+		} catch(ChunkUploadError $e) {
+		}
 
 		try {
 			$chup = new ChunkUploadPatched(
@@ -134,7 +106,8 @@ class ChunkUploadTest extends ChunkUploadFixture {
 				'_some_pfx', CHUNK_SIZE, MAX_FILESIZE,
 				true, $logger
 			);
-		} catch(ChunkUploadError $e) {}
+		} catch(ChunkUploadError $e) {
+		}
 
 		try {
 			$chup = new ChunkUploadPatched(
@@ -142,17 +115,17 @@ class ChunkUploadTest extends ChunkUploadFixture {
 				'_some_pfx', CHUNK_SIZE, MAX_FILESIZE,
 				true, $logger
 			);
-		} catch(ChunkUploadError $e) {}
-	}
-
-	public function test_json() {
+		} catch(ChunkUploadError $e) {
+		}
 	}
 
 	private function make_uploader(
 		$with_fingerprint=false, $postproc=false
 	) {
-		$logger = new zc\Logger(zc\Logger::DEBUG, self::$logfile);
-		$core = new RouterPatched('/', null, false, $logger);
+		$logger = new Logger(Logger::DEBUG, self::$logfile);
+		$core = (new RouterDev)
+			->config('home', '/')
+			->config('logger', $logger);
 		if ($postproc)
 			return new ChunkUploadPostProc(
 				$core, self::$tdir . '/xtemp', self::$tdir . '/xdest',
@@ -220,7 +193,7 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		$core->route('/', [$chup, 'upload'], 'POST');
 		$this->assertEquals($core::$errno, $Err::ECST);
 		$this->assertEquals($core::$data, [$Err::ECST_CID_UNDERSIZED]);
-	
+
 		# file too big
 		$_POST['__testsize'] = filesize($fake_chunk);
 		$_POST['__testindex'] = 0;
@@ -286,7 +259,6 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		$core->route('/', [$chup, 'upload'], 'POST');
 		$this->assertEquals($core::$errno, $Err::ECST);
 		$this->assertEquals($core::$data, [$Err::ECST_MCH_OVERSIZED]);
-
 	}
 
 	private function format_chunk($chunkdata, $callback) {
@@ -317,15 +289,15 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		# single-chunk file
 		$fname = $fls[0][0];
 		$this->upload_chunks(
-			$fname, CHUNK_SIZE, function($chunkdata)
-		{
-			$this->format_chunk($chunkdata, function(){
-				$chup = $this->make_uploader();
-				$core = $chup::$core;
-				$core->route('/', [$chup, 'upload'], 'POST');
-				$this->assertEquals($core::$errno, 0);
+			$fname, CHUNK_SIZE,
+			function($chunkdata) {
+				$this->format_chunk($chunkdata, function(){
+					$chup = $this->make_uploader();
+					$core = $chup::$core;
+					$core->route('/', [$chup, 'upload'], 'POST');
+					$this->assertEquals($core::$errno, 0);
+				});
 			});
-		});
 		$dname = self::$tdir . '/xdest/' . basename($fname);
 		$this->assertEquals(
 			sha1(file_get_contents($fname)),
@@ -334,15 +306,15 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		# multi-chunk file
 		$fname = $fls[1][0];
 		$this->upload_chunks(
-			$fname, CHUNK_SIZE, function($chunkdata)
-		{
-			$this->format_chunk($chunkdata, function(){
-				$chup = $this->make_uploader();
-				$core = $chup::$core;
-				$core->route('/', [$chup, 'upload'], 'POST');
-				$this->assertEquals($core::$errno, 0);
+			$fname, CHUNK_SIZE,
+			function($chunkdata) {
+				$this->format_chunk($chunkdata, function(){
+					$chup = $this->make_uploader();
+					$core = $chup::$core;
+					$core->route('/', [$chup, 'upload'], 'POST');
+					$this->assertEquals($core::$errno, 0);
+				});
 			});
-		});
 		$dname = self::$tdir . '/xdest/' . basename($fname);
 		$this->assertEquals(
 			sha1(file_get_contents($fname)),
@@ -351,20 +323,24 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		# fail post-proc
 		$fname = $fls[0][0];
 		$this->upload_chunks(
-			$fname, CHUNK_SIZE, function($chunkdata) use($Err)
-		{
-			$this->format_chunk($chunkdata, function() use($Err){
-				$chup = $this->make_uploader(false, true);
-				$core = $chup::$core;
-				$core->route('/', [$chup, 'upload'], 'POST');
-				if ($core::$errno !== 0) {
-					$this->assertEquals($core::$errno,
-						$Err::ECST);
-					$this->assertEquals($core::$data[0],
-						$Err::ECST_POSTPROC_FAIL);
-				}
-			});
-		});
+			$fname, CHUNK_SIZE,
+			function($chunkdata) use($Err) {
+				$this->format_chunk(
+					$chunkdata,
+					function() use($Err){
+						$chup = $this->make_uploader(false, true);
+						$core = $chup::$core;
+						$core->route('/', [$chup, 'upload'], 'POST');
+						if ($core::$errno !== 0) {
+							$this->assertEquals($core::$errno,
+								$Err::ECST);
+							$this->assertEquals($core::$data[0],
+								$Err::ECST_POSTPROC_FAIL);
+						}
+					}
+				);
+			}
+		);
 		$dname = self::$tdir . '/xdest/' . basename($fname);
 		$this->assertFalse(file_exists($dname));
 
@@ -373,32 +349,30 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		#     the unpacker that will invalidate it.
 		$fname = $fls[1][0];
 		$this->upload_chunks(
-			$fname, CHUNK_SIZE, function($chunkdata) use($fname, $Err)
-		{
-			$this->format_chunk($chunkdata, function() use($fname, $Err){
-				$faulty = false;
-				if ($_POST['__testindex'] == 1) {
-					$_POST['__testindex'] = 10;
-				}
-				if ($_POST['__testindex'] == floor(
-					filesize($fname) / CHUNK_SIZE) - 1)
-				{
-					$faulty = true;
-				}
-				$chup = $this->make_uploader();
-				$core = $chup::$core;
-				$core->route('/', [$chup, 'upload'], 'POST');
-				if ($faulty) {
-					$this->assertEquals($core::$errno, $Err::ECST);
-					$this->assertEquals($core::$data[0],
-						$Err::ECST_MCH_UNORDERED);
-				}
+			$fname, CHUNK_SIZE,
+			function($chunkdata) use($fname, $Err) {
+				$this->format_chunk($chunkdata,
+				function() use($fname, $Err) {
+					$faulty = false;
+					if ($_POST['__testindex'] == 1)
+						$_POST['__testindex'] = 10;
+					if (
+						$_POST['__testindex'] == floor(
+							filesize($fname) / CHUNK_SIZE) - 1
+					)
+						$faulty = true;
+					$chup = $this->make_uploader();
+					$core = $chup::$core;
+					$core->route('/', [$chup, 'upload'], 'POST');
+					if ($faulty) {
+						$this->assertEquals($core::$errno, $Err::ECST);
+						$this->assertEquals($core::$data[0],
+							$Err::ECST_MCH_UNORDERED);
+					}
+				});
 			});
-		});
 		$dname = self::$tdir . '/xdest/' . basename($fname);
 		$this->assertFalse(file_exists($dname));
-
 	}
 
 }
-

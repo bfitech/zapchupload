@@ -34,7 +34,10 @@ class ChunkUploadFixture extends TestCase {
 	}
 
 	public static function generate_file($path, $size) {
-		exec("dd if=/dev/urandom of=$path bs=1024 count=$size 2>/dev/null");
+		exec(
+			"dd if=/dev/urandom of=$path " .
+				"bs=1024 count=$size 2>/dev/null"
+		);
 	}
 
 	public static function make_chunk($file, $chunk_size, $index) {
@@ -46,7 +49,9 @@ class ChunkUploadFixture extends TestCase {
 		return $chunk;
 	}
 
-	public static function upload_chunks($file, $chunk_size, $callback) {
+	public static function upload_chunks(
+		$file, $chunk_size, $callback
+	) {
 		$size = filesize($file);
 		$base = basename($file);
 		$index = 0;

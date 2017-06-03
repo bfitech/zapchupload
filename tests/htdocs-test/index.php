@@ -19,9 +19,11 @@ $logger = new zc\Logger(
 $core = new zc\Router(null, null, true, $logger);
 
 class ChunkPostProcessed extends zu\ChunkUpload {
+
 	protected function check_fingerprint($fingerprint, $chunk) {
 		return $fingerprint == hash('sha256', $chunk);
 	}
+
 }
 
 $core->route('/', function($args) use($logger, $core) {
@@ -46,4 +48,3 @@ $core->route('/upload_pp', function($args) use($logger, $core) {
 		null, CHUNK_SIZE, MAX_FILESIZE, true, $logger);
 	$cu->upload($args);
 }, 'POST');
-

@@ -11,7 +11,7 @@
   ],
   "require": {
     "php": ">=5.5 || ~7.0",
-    "bfitech/zapcore": "~1.3.0"
+    "bfitech/zapcore": "~1.3.4"
   },
   "require-dev": {
     "bfitech/zaplate": "~1",

@@ -10,7 +10,6 @@ use GuzzleHttp\Client;
 
 class ChunkUploadHTTPTest extends ChunkUploadFixture {
 
-
 	public static function setUpBeforeClass() {
 		self::$server_pid = CoreDev::server_up(
 			__DIR__ . '/htdocs-test');
@@ -29,8 +28,6 @@ class ChunkUploadHTTPTest extends ChunkUploadFixture {
 	}
 
 	public static function tearDownAfterClass() {
-		#foreach (self::file_list() as $file)
-		#	unlink($file[0]);
 		CoreDev::server_down(self::$server_pid);
 	}
 
@@ -48,7 +45,7 @@ class ChunkUploadHTTPTest extends ChunkUploadFixture {
 		]);
 		$this->response = $response;
 		$this->code = $response->getStatusCode();
-		$this->body = (string)$response->getBody(); 
+		$this->body = (string)$response->getBody();
 	}
 
 	public function POST($path, $data=[]) {
@@ -69,7 +66,7 @@ class ChunkUploadHTTPTest extends ChunkUploadFixture {
 		]);
 		$this->response = $response;
 		$this->code = $response->getStatusCode();
-		$this->body = json_decode((string)$response->getBody()); 
+		$this->body = json_decode((string)$response->getBody());
 	}
 
 	public function test_chunker() {
@@ -179,29 +176,31 @@ class ChunkUploadHTTPTest extends ChunkUploadFixture {
 	public function test_chunk_upload_chunk_size_invalid() {
 		# messed-up order due to broken chunk size sent
 		$files = self::file_list();
-		self::upload_chunks($files[1][0], CHUNK_SIZE - 1, function($post) {
-			$this->POST('/upload', $post);
-			if ($this->code !== 200) {
-				$this->assertEquals($this->code, 403);
-				$this->assertEquals($this->body->errno,
-					Err::ECST);
-				$this->assertEquals($this->body->data[0],
-					Err::ECST_MCH_UNORDERED);
-			}
-		});
-		self::upload_chunks($files[1][0], CHUNK_SIZE + 1, function($post) {
-			$this->POST('/upload', $post);
-			if ($this->code !== 200) {
-				$this->assertEquals($this->code, 403);
-				$this->assertEquals($this->body->errno, Err::ECST);
-				$this->assertTrue(in_array($this->body->data[0],
-					[
-						Err::ECST_MCH_OVERSIZED,   # on packing
-						Err::ECST_MCH_UNORDERED,   # on merging
-					]
-				));
-			}
-		});
+		self::upload_chunks($files[1][0], CHUNK_SIZE - 1,
+			function($post) {
+				$this->POST('/upload', $post);
+				if ($this->code !== 200) {
+					$this->assertEquals($this->code, 403);
+					$this->assertEquals($this->body->errno,
+						Err::ECST);
+					$this->assertEquals($this->body->data[0],
+						Err::ECST_MCH_UNORDERED);
+				}
+			});
+		self::upload_chunks($files[1][0], CHUNK_SIZE + 1,
+			function($post) {
+				$this->POST('/upload', $post);
+				if ($this->code !== 200) {
+					$this->assertEquals($this->code, 403);
+					$this->assertEquals($this->body->errno, Err::ECST);
+					$this->assertTrue(in_array($this->body->data[0],
+						[
+							Err::ECST_MCH_OVERSIZED,   # on packing
+							Err::ECST_MCH_UNORDERED,   # on merging
+						]
+					));
+				}
+			});
 		# broken chunk size received
 		self::upload_chunks($files[1][0], CHUNK_SIZE, function($post) {
 			$post['blob'][0] .= pack('v', 1);
@@ -248,6 +247,5 @@ class ChunkUploadHTTPTest extends ChunkUploadFixture {
 			}
 		});
 	}
+
 }
-
-
