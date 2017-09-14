@@ -16,7 +16,7 @@ define('MAX_FILESIZE', 1024 * 500);
 
 $logger = new zc\Logger(
 	zc\Logger::DEBUG, TOPDIR . '/zapchupload.log');
-$core = new zc\Router(null, null, true, $logger);
+$core = (new zc\Router)->config('logger', $logger);
 
 class ChunkPostProcessed extends zu\ChunkUpload {
 

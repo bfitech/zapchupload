@@ -135,6 +135,10 @@ class ChunkUpload {
 	 * @return bool True if fingerprint matches, false otherwise.
 	 *     Unmatched fingerprint will halt remaining chunk uploads.
 	 * @codeCoverageIgnore
+	 *
+	 * @manonly
+	 * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+	 * @endmanonly
 	 */
 	protected function check_fingerprint(
 		$fingerprint, $chunk_received
@@ -259,7 +263,9 @@ class ChunkUpload {
 	private function upload_check_constraints($request) {
 		$Err = new ChunkUploadError;
 		$logger = self::$logger;
-		extract($request, EXTR_SKIP);
+
+		$name = $size = $index = $blob = null;
+		extract($request);
 
 		$size = intval($size);
 		if ($size < 1) {
@@ -326,11 +332,13 @@ class ChunkUpload {
 	 */
 	private function upload_pack_chunk($constraints) {
 		$Err = new ChunkUploadError;
-		extract($constraints, EXTR_SKIP);
+
+		$index = $chunk = $chunk_path = null;
+		extract($constraints);
 
 		# truncate or append
-		$fn = @fopen($tempname, ($index === 0 ? 'wb' : 'ab'));
-		if (false === $fn) {
+		$fhn = @fopen($tempname, ($index === 0 ? 'wb' : 'ab'));
+		if (false === $fhn) {
 			// @codeCoverageIgnoreStart
 			self::$logger->error(
 				"Chupload: cannot open temp file: '%s'.", $tempname);
@@ -338,11 +346,11 @@ class ChunkUpload {
 			// @codeCoverageIgnoreEnd
 		}
 		# write to temp blob
-		fwrite($fn, $chunk);
+		fwrite($fhn, $chunk);
 		# append index
 		if ($index < $max_chunk && $max_chunk > 1)
-			fwrite($fn, pack('v', $index));
-		fclose($fn);
+			fwrite($fhn, pack('v', $index));
+		fclose($fhn);
 		# remove chunk
 		$this->unlink($chunk_path);
 
@@ -357,8 +365,8 @@ class ChunkUpload {
 	) {
 		$Err = new ChunkUploadError;
 		if (
-			false === ($hi = @fopen($tempname, 'rb')) ||
-			false === ($ho = @fopen($destname, 'wb'))
+			false === ($fhi = @fopen($tempname, 'rb')) ||
+			false === ($fho = @fopen($destname, 'wb'))
 		) {
 			// @codeCoverageIgnoreStart
 			$errmsg = sprintf(
@@ -370,28 +378,28 @@ class ChunkUpload {
 		}
 		if ($max_chunk == 0) {
 			# single or last chunk
-			$chunk = fread($hi, $this->chunk_size);
+			$chunk = fread($fhi, $this->chunk_size);
 			if (filesize($tempname) > $this->chunk_size)
 				return [$Err::ECST, [$Err::ECST_MCH_OVERSIZED]];
-			fwrite($ho, $chunk);
+			fwrite($fho, $chunk);
 			return [0];
 		}
 		$total = 0;
 		for ($i=0; $i<$max_chunk; $i++) {
-			$chunk = fread($hi, $this->chunk_size);
+			$chunk = fread($fhi, $this->chunk_size);
 			$total += $this->chunk_size;
 			if ($total > $this->max_filesize)
 				return [$Err::ECST, [$Err::ECST_FSZ_INVALID]];
-			fwrite($ho, $chunk);
-			$tail = fread($hi, 2);
+			fwrite($fho, $chunk);
+			$tail = fread($fhi, 2);
 			if (strlen($tail) < 2)
 				return [$Err::ECST, [$Err::ECST_MCH_UNORDERED]];
 			$i_unpack = unpack('vint', $tail)['int'];
 			if ($i !== $i_unpack)
 				return [$Err::ECST, [$Err::ECST_MCH_UNORDERED]];
 		}
-		$chunk = fread($hi, $this->chunk_size);
-		fwrite($ho, $chunk);
+		$chunk = fread($fhi, $this->chunk_size);
+		fwrite($fho, $chunk);
 		return [0];
 	}
 
@@ -407,12 +415,14 @@ class ChunkUpload {
 		$request = $this->upload_check_request($args);
 		if ($request[0] !== 0)
 			return self::json($request);
-		extract($request[1], EXTR_SKIP);
+
+		$chunk = $fingerprint = null;
+		extract($request[1]);
 
 		$constraints = $this->upload_check_constraints($request[1]);
 		if ($constraints[0] !== 0)
 			return self::json($constraints);
-		extract($constraints[1], EXTR_SKIP);
+		extract($constraints[1]);
 
 		$packed = $this->upload_pack_chunk($constraints[1]);
 		if ($packed[0] !== 0)
