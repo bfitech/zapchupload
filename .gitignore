@@ -6,7 +6,10 @@
 *.ini
 *.orig
 *.bak
+
 composer.lock
+phpcs.xml
+phpmd.xml
 
 /vendor/
 /docs/
