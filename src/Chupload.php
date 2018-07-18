@@ -9,6 +9,11 @@ use BFITech\ZapCore\Logger;
 
 /**
  * Chupload class.
+ *
+ * This will suppress all the PMD warnings in
+ * this class.
+ *
+ * @SuppressWarnings(PHPMD)
  */
 class ChunkUpload {
 
