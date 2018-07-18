@@ -69,11 +69,11 @@ class ChunkUpload {
 			$chunk_size = (int)$chunk_size;
 			if ($chunk_size > 1024 * 1024 * 2) {
 				$logger->warning(
-					"Chupload: chunk size > 2M. Default 2M is used.");
+					"Chupload: chunk size > 2M. Default 100k is used.");
 				$chunk_size = null;
 			} elseif ($chunk_size < 1024) {
 				$logger->warning(
-					"Chupload: chunk size < 1k. Default 2M is used.");
+					"Chupload: chunk size < 1k. Default 100k is used.");
 				$chunk_size = null;
 			} else {
 				$logger->debug(
