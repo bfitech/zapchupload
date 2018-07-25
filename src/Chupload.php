@@ -13,7 +13,9 @@ use BFITech\ZapCore\Logger;
  * This will suppress all the PMD warnings in
  * this class.
  *
- * @SuppressWarnings(PHPMD)
+ * @manonly
+ * @SuppressWarnings(PHPMD.ExcessiveClassComplexity)
+ * @endmanonly
  */
 class ChunkUpload {
 
@@ -48,6 +50,11 @@ class ChunkUpload {
 	 * @param object|null $logger An instance of logging service.
 	 *     If left as null, default logger is used, implying
 	 *     error level and usage of STDERR.
+	 *
+	 * @manonly
+	 * @SuppressWarnings(PHPMD.CyclomaticComplexity)
+	 * @SuppressWarnings(PHPMD.NPathComplexity)
+	 * @endmanonly
 	 */
 	public function __construct(
 		Router $core, $tempdir, $destdir,
@@ -264,6 +271,11 @@ class ChunkUpload {
 
 	/**
 	 * Verifiy new chunk.
+	 *
+	 * @manonly
+	 * @SuppressWarnings(PHPMD.CyclomaticComplexity)
+	 * @SuppressWarnings(PHPMD.NPathComplexity)
+	 * @endmanonly
 	 */
 	private function upload_check_constraints($request) {
 		$Err = new ChunkUploadError;
@@ -415,6 +427,10 @@ class ChunkUpload {
 	 * Uploader.
 	 *
 	 * @param dict $args ZapCore router arguments.
+	 *
+	 * @manonly
+	 * @SuppressWarnings(PHPMD.CyclomaticComplexity)
+	 * @endmanonly
 	 */
 	public function upload($args) {
 		$Err = new ChunkUploadError;
