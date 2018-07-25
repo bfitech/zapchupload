@@ -7,10 +7,15 @@ use PHPUnit\Framework\TestCase;
 define('CHUNK_SIZE', 1024 * 10);
 define('MAX_FILESIZE', 1024 * 500);
 
+
+/**
+ * Test data generator and test wrappers.
+ *
+ * @requires OS Linux
+ */
 class ChunkUploadFixture extends TestCase {
 
 	public static $tdir;
-	public static $server_pid = null;
 	public static $logfile;
 
 	protected $response;
@@ -27,9 +32,16 @@ class ChunkUploadFixture extends TestCase {
 			mkdir($tdir);
 		self::$tdir = $tdir;
 		return [
+			# single chunk
 			[$tdir . '/zapchupload-test-1k.dat', 1],
+			# within-range chunks
 			[$tdir . '/zapchupload-test-200k.dat', 200],
+			# excessive chunks
 			[$tdir . '/zapchupload-test-520k.dat', 520],
+			# rounded to 2 chunks
+			[$tdir . '/zapchupload-test-19k.dat', 19],
+			# exactly 2 chunks
+			[$tdir . '/zapchupload-test-20k.dat', 20],
 		];
 	}
 
@@ -72,6 +84,10 @@ class ChunkUploadFixture extends TestCase {
 
 	public function test_prefix() {
 		$this->assertSame($this->pfx, '__chupload_');
+	}
+
+	public function ae($i, $j) {
+		return $this->assertEquals($i, $j);
 	}
 
 }
