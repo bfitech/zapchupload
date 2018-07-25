@@ -240,11 +240,11 @@ class ChunkUploadTest extends ChunkUploadFixture {
 
 		# invalid fingerprint
 		## fake a chunk from small sample
-		file_put_contents($fake_chunk,
-			file_get_contents($this->file_list()[0][0]));
+		$content = file_get_contents($this->file_list()[0][0]);
+		file_put_contents($fake_chunk, $content);
 		$post['__testsize'] = filesize($fake_chunk);
 		$post['__testindex'] = 1;
-		$post['__testfingerprint'] = 'xxx';
+		$post['__testfingerprint'] = 'wrong-finger';
 		$this->_make_request($chup, $rdev, $post, $files);
 		$this->ae($core::$errno, $Err::ECST);
 		$this->ae($core::$data, [$Err::ECST_FGP_INVALID]);
@@ -260,6 +260,20 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		$this->_make_request($chup, $rdev, $post, $files);
 		$this->ae($core::$errno, $Err::ECST);
 		$this->ae($core::$data, [$Err::ECST_MCH_OVERSIZED]);
+
+		# success, with valid fingerprint
+		$content = file_get_contents($this->file_list()[0][0]);
+		file_put_contents($fake_chunk, $content);
+		$files['__testblob'] = [
+			'error' => UPLOAD_ERR_OK,
+			'tmp_name' => $fake_chunk,
+		];
+		$post['__testsize'] = filesize($fake_chunk);
+		$post['__testindex'] = 0;
+		$post['__testfingerprint'] = $chup::get_fingerprint($content);
+		$this->_make_request($chup, $rdev, $post, $files);
+		$this->ae($core::$errno, 0);
+		$this->ae($core::$data['path'], $post['__testname']);
 	}
 
 	/**
