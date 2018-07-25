@@ -25,8 +25,8 @@ class ChunkUploadPatched extends ChunkUpload {
 	}
 
 	public function check_fingerprint($fingerprint, $chunk_recv) {
-		return hash_equals(
-			$fingerprint, $this->make_fingerprint($chunk_recv));
+		// @note We cannot use hash_equals for PHP5.5 support.
+		return $fingerprint === $this->make_fingerprint($chunk_recv);
 	}
 
 }
