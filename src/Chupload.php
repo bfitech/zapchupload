@@ -319,9 +319,6 @@ class ChunkUpload {
 		if ($max_chunk_s == $max_chunk)
 			$max_chunk--;
 
-		if ($max_chunk == 1)
-			$max_chunk = 0;
-
 		$chunk = file_get_contents($chunk_path);
 
 		$basename = $this->get_basename($name);
@@ -368,7 +365,7 @@ class ChunkUpload {
 		# write to temp blob
 		fwrite($fhn, $chunk);
 		# append index
-		if ($index < $max_chunk && $max_chunk > 1)
+		if ($index < $max_chunk && $max_chunk >= 1)
 			fwrite($fhn, pack('v', $index));
 		fclose($fhn);
 		# remove chunk
