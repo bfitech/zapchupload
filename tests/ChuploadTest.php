@@ -370,18 +370,14 @@ class ChunkUploadTest extends ChunkUploadFixture {
 	public function test_upload_file_rounded_2_chunks() {
 		$fname = self::file_list()[3][0];
 		$this->_process_chunks($fname);
-		# @fixme Failed.
-		# $this->_upload_ok($fname);
-		$this->markTestSkipped("Failed on 2 chunks.");
+		$this->_upload_ok($fname);
 	}
 
 	public function test_upload_file_exactly_2_chunks() {
 		$fname = self::file_list()[4][0];
 		$this->_process_chunks($fname);
 		$dname = self::$tdir . '/xdest/' . basename($fname);
-		# @fixme Failed.
-		# $this->_upload_ok($fname);
-		$this->markTestSkipped("Failed on exactly 2 chunks.");
+		$this->_upload_ok($fname);
 	}
 
 	public function test_upload_multi_chunks() {
