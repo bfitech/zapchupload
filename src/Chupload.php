@@ -169,20 +169,18 @@ class ChunkUpload {
 	}
 
 	/**
-	 * Post-processing.
+	 * Post-processing stub.
 	 *
-	 * Use this for fast post-processing such as pulling and/or
-	 * stripping EXIF tags. For longer processing, hide destdir
-	 * and process from there to avoid script timeout.
+	 * Override this for fast post-processing such as pulling and/or
+	 * stripping EXIF tags. For longer processing, use destdir
+	 * and process from there to avoid script timeout, while keeping
+	 * return of this method always true.
 	 *
 	 * @param string $path Path to destination path.
-	 * @return bool|string False for failed post-processing, new
-	 *     destination path otherwise, which can be the same with
-	 *     input path. Changing path must be wrapped inside this
-	 *     method.
+	 * @return bool Indicates result of post-processing.
 	 */
 	protected function post_processing($path) {
-		return $path;
+		return true;
 	}
 
 	/**
@@ -473,8 +471,7 @@ class ChunkUpload {
 			}
 			$this->unlink($tempname);
 
-			$postproc_destname = $this->post_processing($destname);
-			if (!$postproc_destname) {
+			if (!$this->post_processing($destname)) {
 				if (file_exists($destname))
 					$this->unlink($destname);
 				$logger->error("Chupload: post-processing failed.");
