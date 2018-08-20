@@ -433,19 +433,19 @@ class ChunkUpload {
 
 		$request = $this->upload_check_request($args);
 		if ($request[0] !== 0)
-			return self::json($request);
+			return static::json($request);
 
 		$chunk = $fingerprint = null;
 		extract($request[1]);
 
 		$constraints = $this->upload_check_constraints($request[1]);
 		if ($constraints[0] !== 0)
-			return self::json($constraints);
+			return static::json($constraints);
 		extract($constraints[1]);
 
 		$packed = $this->upload_pack_chunk($constraints[1]);
 		if ($packed[0] !== 0)
-			return self::json($packed);
+			return static::json($packed);
 
 		// fingerprint check
 		if (
@@ -455,7 +455,7 @@ class ChunkUpload {
 			# fingerprint violation
 			$logger->warning("Chupload: fingerprint doesn't match.");
 			$this->unlink($tempname);
-			return self::json([$Err::ECST, [$Err::ECST_FGP_INVALID]]);
+			return static::json([$Err::ECST, [$Err::ECST_FGP_INVALID]]);
 		}
 
 		// merge chunks on finish
@@ -467,7 +467,7 @@ class ChunkUpload {
 				$this->unlink($destname);
 				$this->unlink($tempname);
 				$logger->warning("Chupload: broken chunk.");
-				return self::json($merge_status);
+				return static::json($merge_status);
 			}
 			$this->unlink($tempname);
 
@@ -475,7 +475,7 @@ class ChunkUpload {
 				if (file_exists($destname))
 					$this->unlink($destname);
 				$logger->error("Chupload: post-processing failed.");
-				return self::json(
+				return static::json(
 					[$Err::ECST, [$Err::ECST_POSTPROC_FAIL]]);
 			}
 
@@ -484,7 +484,7 @@ class ChunkUpload {
 		// success
 		$logger->info(
 			"Chupload: file successfully uploaded: '$basename'.");
-		return self::json([0, [
+		return static::json([0, [
 			'path' => $basename,
 			'index'  => $index,
 		]]);
