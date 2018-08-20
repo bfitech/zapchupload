@@ -164,7 +164,6 @@ class ChunkUpload {
 	 * @param string $path Path to a file.
 	 */
 	protected function get_basename($path) {
-		// patch this
 		return basename($path);
 	}
 
@@ -178,6 +177,10 @@ class ChunkUpload {
 	 *
 	 * @param string $path Path to destination path.
 	 * @return bool Indicates result of post-processing.
+	 *
+	 * @if 0
+	 * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+	 * @endif
 	 */
 	protected function post_processing($path) {
 		return true;
