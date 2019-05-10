@@ -38,7 +38,7 @@ class ChunkUploadPatched extends ChunkUpload {
  */
 class ChunkUploadPostProc extends ChunkUploadPatched {
 
-	public function post_processing(string $path) {
+	public function post_processing(array $args, array $chunk_data) {
 		return false;
 	}
 
@@ -400,9 +400,8 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		$this->_process_chunks(
 			$fname, false, true,
 			function($core) use($Err){
-				if ($core::$errno !== 0) {
+				if ($core::$errno !== 0)
 					$this->ae($core::$errno, $Err::ECST_POSTPROC_FAIL);
-				}
 			}
 		);
 		$dname = self::$tdir . '/xdest/' . basename($fname);

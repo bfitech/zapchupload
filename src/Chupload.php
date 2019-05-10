@@ -3,6 +3,7 @@
 
 namespace BFITech\ZapChupload;
 
+
 use BFITech\ZapCore\Router;
 use BFITech\ZapCore\Logger;
 
@@ -19,7 +20,7 @@ use BFITech\ZapCore\Logger;
  */
 class ChunkUpload {
 
-	/** Core instance. */
+	/** Router instance. */
 	public static $core = null;
 	/** Logger instance. */
 	public static $logger = null;
@@ -105,7 +106,7 @@ class ChunkUpload {
 		}
 
 		if ($tempdir == $destdir) {
-			$errmsg = "Temp and destination dirs shan't be the same.";
+			$errmsg = "Temp and destination dirs mustn't be the same.";
 			$logger->error("Chupload: $errmsg");
 			throw new ChunkUploadError($errmsg);
 		}
@@ -149,10 +150,62 @@ class ChunkUpload {
 	/**
 	 * Default basename generator.
 	 *
+	 * Override this if you want to rename uploaded file according to
+	 * certain rule. This only determine the basename, not the entire
+	 * absolute path.
+	 *
 	 * @param string $path Path to a file.
+	 * @return string Destination file basename.
 	 */
 	protected function get_basename(string $path) {
 		return basename($path);
+	}
+
+	/**
+	 * Pre-processing stub.
+	 *
+	 * Override this for pre-processing checks, e.g. when you want
+	 * to determine whether upload must proceed after certain
+	 * pre-conditions are met.
+	 *
+	 * @param dict $args ZapCore Router arguments.
+	 * @param dict $chunk_data Dict of chunk data with keys:
+	 *     - `(int)size`, total filesize
+	 *     - `(int)index`, chunk index
+	 *     - `(string)chunk_path`, chunk absolute path
+	 *     - `(int)max_chunk`, max chunk
+	 *     - `(string)chunk`, chunk as string
+	 *     - `(string)basename`, file basename
+	 *     - `(string)tempname`, file absolute tempname
+	 *     - `(string)destname`, file absolute destination
+	 * @return bool True on success.
+	 *
+	 * @cond
+	 * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+	 * @endcond
+	 */
+	protected function pre_processing(array $args, array $chunk_data) {
+		return true;
+	}
+
+	/**
+	 * Chunk processing hook.
+	 *
+	 * Use this for chunk-specific processing, e.g. fingerprinting.
+	 *
+	 * @param dict $args ZapCore router arguments.
+	 * @param dict $chunk_data Dict of chunk data. See
+	 *     Chupload::pre_processing.
+	 * @return bool True on success.
+	 *
+	 * @cond
+	 * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+	 * @endcond
+	 */
+	protected function chunk_processing(
+		array $args, array $chunk_data
+	) {
+		return true;
 	}
 
 	/**
@@ -161,28 +214,29 @@ class ChunkUpload {
 	 * Override this for fast post-processing such as pulling and/or
 	 * stripping EXIF tags. For longer processing, use destdir
 	 * and process from there to avoid script timeout, while keeping
-	 * return of this method always true.
+	 * return of this method always true. Also useful if you want to
+	 * integrate Chupload as a part of generic zapcore routing handler.
 	 *
-	 * @param string $path Path to destination path.
-	 * @return bool Indicates result of post-processing.
+	 * @param dict $args ZapCore router arguments.
+	 * @param dict $chunk_data Dict of chunk data. See
+	 *     Chupload::pre_processing.
+	 * @return bool True on success.
 	 *
 	 * @cond
 	 * @SuppressWarnings(PHPMD.UnusedFormalParameter)
 	 * @endcond
 	 */
-	protected function post_processing(string $path) {
+	protected function post_processing(array $args, array $chunk_data) {
 		return true;
 	}
 
 	/**
-	 * Print JSON.
+	 * Wrap JSON response.
 	 *
 	 * This is different from typical core JSON since it's related to
 	 * upload end status.
-	 *
-	 * @param array $resp Array with values: 0 := `errno`, 1 := `data`.
 	 */
-	public static function json(array $resp) {
+	private function json(array $resp) {
 		$Err = new ChunkUploadError;
 		$errno = $resp[0];
 		$data = isset($resp[1]) ? $resp[1] : null;
@@ -195,7 +249,32 @@ class ChunkUpload {
 				$http_code = 503;
 			// @codeCoverageIgnoreEnd
 		}
+		if (!$this->intercept_response($errno, $data, $http_code))
+			return;
 		self::$core->print_json($errno, $data, $http_code);
+	}
+
+	/**
+	 * JSON response interceptor.
+	 *
+	 * Override this if you want to stop uploader from printing
+	 * out JSON response and halt. Useful when you're integrating
+	 * Chupload with other router. Parameters are ready to pass to
+	 * Router::print_json().
+	 *
+	 * @param int $errno Response error number.
+	 * @param mixed $data Response data. Typically null on failure.
+	 * @param int $http_errno HTTP status code.
+	 * @return bool If true, send JSON response and halt.
+	 *
+	 * @cond
+	 * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+	 * @endcond
+	 */
+	protected function intercept_response(
+		int $errno, array $data=null, int $http_errno
+	) {
+		return true;
 	}
 
 	/**
@@ -214,7 +293,7 @@ class ChunkUpload {
 	/**
 	 * Verify request.
 	 */
-	private function upload_check_request(array $args) {
+	private function check_request(array $args) {
 		$Err = new ChunkUploadError;
 		$logger = self::$logger;
 
@@ -255,11 +334,8 @@ class ChunkUpload {
 
 	/**
 	 * Verifiy new chunk.
-	 *
-	 * @SuppressWarnings(PHPMD.CyclomaticComplexity)
-	 * @SuppressWarnings(PHPMD.NPathComplexity)
 	 */
-	private function upload_check_constraints(array $request) {
+	private function check_constraints(array $request) {
 		$Err = new ChunkUploadError;
 		$logger = self::$logger;
 
@@ -329,7 +405,7 @@ class ChunkUpload {
 	/**
 	 * Append new chunk to packed chunks.
 	 */
-	private function upload_pack_chunk(array $constraints) {
+	private function pack_chunk(array $constraints) {
 		$Err = new ChunkUploadError;
 
 		$index = $chunk = $chunk_path = null;
@@ -341,7 +417,7 @@ class ChunkUpload {
 			// @codeCoverageIgnoreStart
 			self::$logger->error(
 				"Chupload: cannot open temp file: '%s'.", $tempname);
-			return [$Err::EDIO, []];
+			return $Err::EDIO;
 			// @codeCoverageIgnoreEnd
 		}
 		# write to temp blob
@@ -353,13 +429,13 @@ class ChunkUpload {
 		# remove chunk
 		$this->unlink($chunk_path);
 
-		return [0];
+		return 0;
 	}
 
 	/**
 	 * Merge packed chunks to destination.
 	 */
-	private function upload_merge_chunks(
+	private function merge_chunks(
 		string $tempname, string $destname, int $max_chunk
 	) {
 		$Err = new ChunkUploadError;
@@ -372,64 +448,90 @@ class ChunkUpload {
 				"Cannot open files for merging: '%s' -> '%s'.",
 				$tempname, $destname);
 			self::$logger->error("Chupload: $errmsg");
-			return [$Err::EDIO, []];
+			return $Err::EDIO;
 			// @codeCoverageIgnoreEnd
 		}
 		if ($max_chunk == 0) {
 			# single or last chunk
 			$chunk = fread($fhi, $this->chunk_size);
 			if (filesize($tempname) > $this->chunk_size)
-				return [$Err::ECST_MCH_OVERSIZED];
+				return $Err::ECST_MCH_OVERSIZED;
 			fwrite($fho, $chunk);
-			return [0];
+			return 0;
 		}
 		$total = 0;
 		for ($i=0; $i<$max_chunk; $i++) {
 			$chunk = fread($fhi, $this->chunk_size);
 			$total += $this->chunk_size;
 			if ($total > $this->max_filesize)
-				return [$Err::ECST_FSZ_INVALID];
+				return $Err::ECST_FSZ_INVALID;
 			fwrite($fho, $chunk);
 			$tail = fread($fhi, 2);
 			if (strlen($tail) < 2)
-				return [$Err::ECST_MCH_UNORDERED];
+				return $Err::ECST_MCH_UNORDERED;
 			$i_unpack = unpack('vint', $tail)['int'];
 			if ($i !== $i_unpack)
-				return [$Err::ECST_MCH_UNORDERED];
+				return $Err::ECST_MCH_UNORDERED;
 		}
 		$chunk = fread($fhi, $this->chunk_size);
 		fwrite($fho, $chunk);
-		return [0];
+		return 0;
+	}
+
+	/**
+	 * Finalize merging and execute post-processor.
+	 */
+	private function finalize(array $args, array $chunk_data) {
+		$log = self::$logger;
+		$tempname = $destname = $max_chunk = null;
+		extract($chunk_data);
+
+		$merge_status = $this->merge_chunks(
+			$tempname, $destname, $max_chunk);
+		if ($merge_status !== 0) {
+			$this->unlink($tempname);
+			$this->unlink($destname);
+			$log->warning("Chupload: broken chunk.");
+			return $merge_status;
+		}
+		$this->unlink($tempname);
+
+		if (!$this->post_processing($args, $chunk_data)) {
+			if (file_exists($destname))
+				$this->unlink($destname);
+			$log->error("Chupload: post-processing failed.");
+			return ChunkUploadError::ECST_POSTPROC_FAIL;
+		}
+		return 0;
 	}
 
 	/**
 	 * Uploader.
 	 *
 	 * @param dict $args ZapCore router arguments.
-	 *
-	 * @cond
-	 * @SuppressWarnings(PHPMD.CyclomaticComplexity)
-	 * @endcond
 	 */
 	public function upload(array $args) {
 		$Err = new ChunkUploadError;
 		$logger = self::$logger;
 
-		$request = $this->upload_check_request($args);
+		$request = $this->check_request($args);
 		if ($request[0] !== 0)
-			return static::json($request);
+			return $this->json($request);
 
 		$chunk = $fingerprint = null;
 		extract($request[1]);
 
-		$constraints = $this->upload_check_constraints($request[1]);
+		$constraints = $this->check_constraints($request[1]);
 		if ($constraints[0] !== 0)
-			return static::json($constraints);
-		extract($constraints[1]);
+			return $this->json($constraints);
+		$chunk_data = $constraints[1];
 
-		$packed = $this->upload_pack_chunk($constraints[1]);
-		if ($packed[0] !== 0)
-			return static::json($packed);
+		$tempname = $basename = $index = $max_chunk = null;
+		extract($chunk_data);
+
+		$packed = $this->pack_chunk($chunk_data);
+		if ($packed !== 0)
+			return $this->json([$packed]);
 
 		// fingerprint check
 		if (
@@ -439,36 +541,20 @@ class ChunkUpload {
 			# fingerprint violation
 			$logger->warning("Chupload: fingerprint doesn't match.");
 			$this->unlink($tempname);
-			return static::json([$Err::ECST_FGP_INVALID]);
+			return $this->json([$Err::ECST_FGP_INVALID]);
 		}
 
 		// merge chunks on finish
 		if ($max_chunk == $index) {
-
-			$merge_status = $this->upload_merge_chunks(
-				$tempname, $destname, $max_chunk);
-			if ($merge_status[0] !== 0) {
-				$this->unlink($destname);
-				$this->unlink($tempname);
-				$logger->warning("Chupload: broken chunk.");
-				return static::json($merge_status);
-			}
-			$this->unlink($tempname);
-
-			if (!$this->post_processing($destname)) {
-				if (file_exists($destname))
-					$this->unlink($destname);
-				$logger->error("Chupload: post-processing failed.");
-				return static::json(
-					[$Err::ECST_POSTPROC_FAIL]);
-			}
-
+			$retval = $this->finalize($args, $chunk_data);
+			if ($retval !== 0)
+				return $this->json([$retval]);
 		}
 
 		// success
 		$logger->info(
 			"Chupload: file successfully uploaded: '$basename'.");
-		return static::json([0, [
+		return $this->json([0, [
 			'path' => $basename,
 			'index'  => $index,
 		]]);
