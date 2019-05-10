@@ -42,21 +42,17 @@ class ChunkUpload {
 	/**
 	 * Constructor.
 	 *
-	 * @param object $core A core instance.
+	 * @param Router $core Router instance.
 	 * @param string $tempdir Temporary upload directory.
 	 * @param string $destdir Destination directory.
 	 * @param string $post_prefix POST data prefix. Defaults to
 	 *     '__chupload_'.
 	 * @param int $chunk_size Chunk size, defaults to 2M.
 	 * @param int $max_filesize Maximum filesize, defaults to 10M.
-	 * @param object $logger An instance of logging service.
+	 *     Make sure this is below PHP `upload_max_filesize`.
+	 * @param Logger $logger An instance of logging service.
 	 *     If left as null, default logger is used, with error log
 	 *     level and STDERR handle.
-	 *
-	 * @cond
-	 * @SuppressWarnings(PHPMD.CyclomaticComplexity)
-	 * @SuppressWarnings(PHPMD.NPathComplexity)
-	 * @endcond
 	 */
 	public function __construct(
 		Router $core, string $tempdir, string $destdir,
@@ -96,16 +92,26 @@ class ChunkUpload {
 		$logger->debug(sprintf(
 			"Chupload: using max filesize: %s.", $this->max_filesize));
 
+		$this->prepare_dir($tempdir, $destdir);
+	}
+
+	/**
+	 * Prepare temporary and destination directories.
+	 */
+	private function prepare_dir($tempdir, $destdir) {
+		$log = self::$logger;
+
 		if (!$tempdir || !$destdir) {
 			$errmsg = sprintf('%s not set.',
 				(!$tempdir ? 'Temporary' : 'Destination'));
-			$logger->error("Chupload: $errmsg");
+			$log->error("Chupload: $errmsg");
 			throw new ChunkUploadError($errmsg);
 		}
 
 		if ($tempdir == $destdir) {
-			$errmsg = "Temp and destination dirs mustn't be the same.";
-			$logger->error("Chupload: $errmsg");
+			$errmsg = "Temporary and destination dirs mustn't " .
+				"be the same.";
+			$log->error("Chupload: $errmsg");
 			throw new ChunkUploadError($errmsg);
 		}
 
@@ -117,7 +123,7 @@ class ChunkUpload {
 				$errmsg = sprintf(
 					"Cannot create %s directory: '%s.'",
 					$dname, $dpath);
-				$logger->error("Chupload: $errmsg");
+				$log->error("Chupload: $errmsg");
 				throw new ChunkUploadError($errmsg);
 			}
 			$this->$dname = $dpath;
