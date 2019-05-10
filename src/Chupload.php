@@ -330,6 +330,7 @@ class ChunkUpload {
 		$max_chunk = floor($max_chunk_float);
 		if ($max_chunk_float == $max_chunk)
 			$max_chunk--;
+		$max_chunk = intval($max_chunk);
 
 		$chunk = file_get_contents($chunk_path);
 
@@ -407,7 +408,7 @@ class ChunkUpload {
 			return $Err::EDIO;
 			// @codeCoverageIgnoreEnd
 		}
-		if ($max_chunk == 0) {
+		if ($max_chunk === 0) {
 			# single or last chunk
 			$chunk = fread($fhi, $this->chunk_size);
 			if (filesize($tempname) > $this->chunk_size)
@@ -484,7 +485,7 @@ class ChunkUpload {
 		extract($this->chunk_data);
 
 		// pre-processing
-		if ($index == 0 && !$this->pre_processing())
+		if ($index === 0 && !$this->pre_processing())
 			return $this->json([$Err::ECST_PREPROC_FAIL]);
 
 		// chunk processing
@@ -492,7 +493,7 @@ class ChunkUpload {
 			return $this->json([$Err::ECST_CHUNKPROC_FAIL]);
 
 		// merge chunks on finish and do post-processing
-		if ($max_chunk == $index && 0 !== $check = $this->finalize())
+		if ($max_chunk === $index && 0 !== $check = $this->finalize())
 			return $this->json([$check]);
 
 		// success
