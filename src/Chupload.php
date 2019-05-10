@@ -47,12 +47,13 @@ class ChunkUpload {
 	 * @param string $destdir Destination directory.
 	 * @param string $post_prefix POST data prefix. Defaults to
 	 *     '__chupload_'.
-	 * @param int $chunk_size Chunk size, defaults to 2M.
+	 * @param int $chunk_size Chunk size, defaults to 2M. Make sure
+	 *     this is below PHP `upload_max_filesize`.
 	 * @param int $max_filesize Maximum filesize, defaults to 10M.
-	 *     Make sure this is below PHP `upload_max_filesize`.
+	 *     Not affected by `upload_max_filesize`.
 	 * @param Logger $logger An instance of logging service.
-	 *     If left as null, default logger is used, with error log
-	 *     level and STDERR handle.
+	 *     If null, default logger with error log evel and STDERR
+	 *     are used.
 	 */
 	public function __construct(
 		Router $core, string $tempdir, string $destdir,
@@ -244,6 +245,11 @@ class ChunkUpload {
 
 	/**
 	 * Verify request.
+	 *
+	 * On success, this sets Chupload::request.
+	 *
+	 * @return int $errno 0 on success, certain number from class
+	 *     constants on error.
 	 */
 	private function check_request() {
 		$Err = new ChunkUploadError;
@@ -286,7 +292,12 @@ class ChunkUpload {
 	}
 
 	/**
-	 * Verifiy new chunk.
+	 * Verifiy new chunk out of Chupload::request.
+	 *
+	 * On success, this sets Chupload::chunk_data.
+	 *
+	 * @return int $errno 0 on success, certain number from class
+	 *     constants on error.
 	 */
 	private function check_constraints() {
 		$Err = new ChunkUploadError;
@@ -361,6 +372,13 @@ class ChunkUpload {
 
 	/**
 	 * Append new chunk to packed chunks.
+	 *
+	 * Unless it's on latest chunk, there's always unsigned short
+	 * integer appended at the end, representing index. The only
+	 * failure is due to I/O error.
+	 *
+	 * @return int $errno 0 on success, certain number from class
+	 *     constants on error.
 	 */
 	private function pack_chunk() {
 		$Err = new ChunkUploadError;
@@ -391,6 +409,9 @@ class ChunkUpload {
 
 	/**
 	 * Merge packed chunks to destination.
+	 *
+	 * @return int $errno 0 on success, certain number from class
+	 *     constants on error.
 	 */
 	private function merge_chunks() {
 		$Err = new ChunkUploadError;
@@ -409,27 +430,25 @@ class ChunkUpload {
 			// @codeCoverageIgnoreEnd
 		}
 		if ($max_chunk === 0) {
-			# single or last chunk
+			# single and last chunk, no tail
 			$chunk = fread($fhi, $this->chunk_size);
-			if (filesize($tempname) > $this->chunk_size)
-				return $Err::ECST_MCH_OVERSIZED;
 			fwrite($fho, $chunk);
 			return 0;
 		}
+
+		# head chunks, with tail
 		$total = 0;
 		for ($i=0; $i<$max_chunk; $i++) {
 			$chunk = fread($fhi, $this->chunk_size);
 			$total += $this->chunk_size;
-			if ($total > $this->max_filesize)
-				return $Err::ECST_FSZ_INVALID;
 			fwrite($fho, $chunk);
 			$tail = fread($fhi, 2);
-			if (strlen($tail) < 2)
-				return $Err::ECST_MCH_UNORDERED;
 			$i_unpack = unpack('vint', $tail)['int'];
 			if ($i !== $i_unpack)
 				return $Err::ECST_MCH_UNORDERED;
 		}
+
+		# last chunk, no tail
 		$chunk = fread($fhi, $this->chunk_size);
 		fwrite($fho, $chunk);
 		return 0;
@@ -479,7 +498,9 @@ class ChunkUpload {
 
 		# pack chunk
 		if (0 !== $check = $this->pack_chunk())
+			// @codeCoverageIgnoreStart
 			return $this->json([$check]);
+			// @codeCoverageIgnoreEnd
 
 		$basename = $index = $max_chunk = null;
 		extract($this->chunk_data);

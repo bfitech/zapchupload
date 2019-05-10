@@ -292,10 +292,10 @@ class ChunkUploadTest extends ChunkUploadFixture {
 	 * Format chunk data into fake $_POST and $_FILES ready to use
 	 * by fake HTTP requests.
 	 */
-	private function _format_chunk($chunkdata, $callback) {
+	private function _format_chunk($postfiles, $callback_route) {
 		$i = 0;
 		$post = $files = [];
-		foreach ($chunkdata as $key => $val) {
+		foreach ($postfiles as $key => $val) {
 			if ($key == 'blob') {
 				$base = $val[1];
 				$ftmp = sprintf('%s/.%s-%s', self::$tdir . '/xtemp',
@@ -310,56 +310,42 @@ class ChunkUploadTest extends ChunkUploadFixture {
 			}
 			$i++;
 		}
-		$callback($post, $files);
+		$callback_route($post, $files);
 	}
 
 	/**
 	 * Execute fake routing.
 	 */
-	private function _handle_upload(
-		$chunkdata, $chup, $rdev, $callback_res=null, $callback_req=null
-	) {
+	private function _handle_upload($postfiles, $chup, $rdev) {
 		$core = $chup::$core;
-		$this->_format_chunk($chunkdata,
-			function($post, $files) use(
-				$chup, $core, $rdev, $callback_req, $callback_res
-			) {
-				if ($callback_req) {
-					$args = $callback_req([
-						'post' => $post, 'files' =>$files]);
-					$post = $args['post'];
-					$files = $args['files'];
-				}
+		$this->_format_chunk(
+			$postfiles,
+			function($post, $files) use($chup, $core, $rdev) {
 				$this->_make_request($chup, $rdev, $post, $files);
-				if ($callback_res)
-					$callback_res($core);
-				else
-					# assume success if callback doesn't exist
-					$this->ae($core::$errno, 0);
-		});
+			}
+		);
 	}
 
 	/**
 	 * Fake uploading the whole file. Internally uses
-	 * $this->upload_chunks. Use $callback_res($core) for
-	 * additional response checks. Use $callback_req($args) to
-	 * modify request args.
+	 * $this->upload_chunks. Use $cb_resp($core) for
+	 * additional response checks.
 	 */
 	private function _process_chunks(
-		$fname, $callback_res=null, $callback_req=null, $cls=''
+		$fname, $cls='', $tamper=null, $cb_resp=null
 	) {
 		$chup = $this->_make_uploader($cls);
 		$rdev = new RoutingDev($chup::$core);
 
 		$this->upload_chunks(
 			$fname, CHUNK_SIZE,
-			function ($chunkdata) use(
-				$chup, $rdev, $callback_res, $callback_req
-			) {
-				$this->_handle_upload(
-					$chunkdata, $chup, $rdev, $callback_res,
-					$callback_req);
-			});
+			function ($postfiles) use($chup, $rdev, $cb_resp) {
+				$this->_handle_upload($postfiles, $chup, $rdev);
+				if (is_callable($cb_resp))
+					$cb_resp($chup::$core);
+			},
+			$tamper
+		);
 	}
 
 	/**
@@ -370,6 +356,11 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		$this->ae(
 			sha1(file_get_contents($fname)),
 			sha1(file_get_contents($dname)));
+	}
+
+	private function _upload_error($fname) {
+		$dname = self::$tdir . '/xdest/' . basename($fname);
+		$this->assertFalse(file_exists($dname));
 	}
 
 	public function test_upload_file_single_chunk() {
@@ -400,56 +391,113 @@ class ChunkUploadTest extends ChunkUploadFixture {
 	public function test_upload_file_too_big() {
 		$fname = self::file_list()[2][0];
 		$this->_process_chunks(
-			$fname, function($core) {
-				if ($core::$errno !== 0)
-					$this->ae($core::$errno, Err::ECST_FSZ_OVERSIZED);
+			$fname, '', null,
+			function($core) {
+				$this->ae($core::$errno, Err::ECST_FSZ_OVERSIZED);
 			}
 		);
-		$dname = self::$tdir . '/xdest/' . basename($fname);
-		$this->assertFalse(file_exists($dname));
+		$this->_upload_error($fname);
 	}
 
 	public function test_upload_file_failed_postproc() {
 		$fname = self::file_list()[0][0];
 		$this->_process_chunks(
-			$fname, function($core) {
+			$fname, 'ChunkUploadPostProc', null,
+			function($core) {
 				if ($core::$errno !== 0)
 					$this->ae($core::$errno, Err::ECST_POSTPROC_FAIL);
-			}, null, 'ChunkUploadPostProc'
-		);
-		$dname = self::$tdir . '/xdest/' . basename($fname);
-		$this->assertFalse(file_exists($dname));
-	}
-
-	public function test_upload_file_unordered_chunks() {
-		# @note When index sequence is messed up, upload goes on until
-		#     the end. It's the unpacker that will invalidate it.
-		#     There's no fail-early mechanism when this happens.
-		$fname = self::file_list()[1][0];
-		$this->_process_chunks(
-			$fname,
-			function($core) {
-				if (self::$core->faulty) {
-					$this->ae($core::$errno, Err::ECST_MCH_UNORDERED);
-				} else {
-					$this->ae($core::$errno, 0);
-				}
-			},
-			function($args) use($fname) {
-				# intentionally breaks indexing
-				self::$core->faulty = false;
-				if ($args['post']['__testindex'] == 1)
-					$args['post']['__testindex'] = 10;
-				if (
-					$args['post']['__testindex'] == floor(
-						filesize($fname) / CHUNK_SIZE) - 1
-				)
-					self::$core->faulty = true;
-				return $args;
 			}
 		);
-		$dname = self::$tdir . '/xdest/' . basename($fname);
-		$this->assertFalse(file_exists($dname));
+		$this->_upload_error($fname);
 	}
 
+	public function test_upload_file_temper() {
+
+		## broken index
+		##
+		## When index sequence is messed up, upload goes on until
+		## the end. It's the unpacker that will invalidate it.
+		## There's no fail-early mechanism when this happens.
+		$fname = self::file_list()[1][0];
+		$this->_process_chunks(
+			$fname, '', function($postfiles) {
+				if ($postfiles['index'] == 5)
+					$postfiles['index'] = 4;
+				return $postfiles;
+			},
+			function($core) {
+				if ($core::$errno !== 0)
+					$this->ae($core::$errno, Err::ECST_MCH_UNORDERED);
+			}
+		);
+		$this->_upload_error($fname);
+
+		## broken chunk
+		##
+		## Tampering with a mid chunk will break the tail, hence
+		## the order will be messed up, unless packed chunk
+		## coincidentally unfolds, which is very unlikely.
+		$fname = self::file_list()[1][0];
+		$this->_process_chunks(
+			$fname, '', function($postfiles) {
+				list($chunk, $base) = $postfiles['blob'];
+				if ($postfiles['index'] == 4)
+					$postfiles['blob'] = [substr($chunk, 0, 45), $base];
+				return $postfiles;
+			},
+			function($core) {
+				if ($core::$errno !== 0)
+					$this->ae($core::$errno, Err::ECST_MCH_UNORDERED);
+			}
+		);
+		$this->_upload_error($fname);
+
+		## broken size
+		##
+		## Excessive size may cause oversizing, and since the uploader
+		## proceeds with the remaining chunks regardless the size
+		## error, later it invokes unordered error. Client ideally
+		## stops at first error occurrence. Slight addition to the
+		## size not necessarily causes error since it's factored
+		## and rounded by chunk_size.
+		$fname = self::file_list()[1][0];
+		$this->_process_chunks(
+			$fname, '', function($postfiles) {
+				# causes FSZ_INVALID
+				if ($postfiles['index'] == 3)
+					$postfiles['size'] -= 200000;
+				# causes FSZ_OVERSIZED
+				if ($postfiles['index'] == 4)
+					$postfiles['size'] += 200000;
+				# slight addition, noop
+				if ($postfiles['index'] == 5)
+					$postfiles['size'] += 20;
+				return $postfiles;
+			},
+			function($core) {
+				$errno = $core::$errno;
+				if ($errno !== 0) {
+					$this->assertTrue(
+						$errno == Err::ECST_FSZ_INVALID ||
+						$errno == Err::ECST_FSZ_OVERSIZED ||
+						$errno == Err::ECST_MCH_UNORDERED
+					);
+				}
+			}
+		);
+		$this->_upload_error($fname);
+
+		## TODO: broken base
+		$fname = self::file_list()[1][0];
+		$this->_process_chunks(
+			$fname, '', function($postfiles) {
+				list($chunk, $base) = $postfiles['blob'];
+				if ($postfiles['index'] == 5)
+					$postfiles['blob'] = [$chunk, $base . 'xx']; 
+				return $postfiles;
+			},
+			function($core) {
+			}
+		);
+	}
 }
