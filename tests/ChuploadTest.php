@@ -172,8 +172,7 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		];
 		$files = [];
 		$this->_make_request($chup, $rdev, $post, $files);
-		$this->ae($core::$errno, $Err::EREQ);
-		$this->ae($core::$data, [$Err::EREQ_NO_CHUNK]);
+		$this->ae($core::$errno, $Err::EREQ_NO_CHUNK);
 
 		$fake_chunk = self::$tdir . '/fakechunk.dat';
 		$fls = $this->file_list()[2][0];
@@ -186,29 +185,26 @@ class ChunkUploadTest extends ChunkUploadFixture {
 			'tmp_name' => $fake_chunk,
 		];
 		$this->_make_request($chup, $rdev, $post, $files);
-		$this->ae($core::$errno, $Err::EREQ);
-		$this->ae($core::$data, [$Err::EREQ_DATA_INCOMPLETE]);
+		$this->ae($core::$code, 403);
+		$this->ae($core::$errno, $Err::EREQ_DATA_INCOMPLETE);
 
 		# invalid filesize
 		$post['__testsize'] = -1;
 		$post['__testindex'] = -1;
 		$this->_make_request($chup, $rdev, $post, $files);
-		$this->ae($core::$errno, $Err::ECST);
-		$this->ae($core::$data, [$Err::ECST_FSZ_INVALID]);
+		$this->ae($core::$errno, $Err::ECST_FSZ_INVALID);
 
 		# index too small
 		$post['__testsize'] = 1000;
 		$post['__testindex'] = -1;
 		$this->_make_request($chup, $rdev, $post, $files);
-		$this->ae($core::$errno, $Err::ECST);
-		$this->ae($core::$data, [$Err::ECST_CID_UNDERSIZED]);
+		$this->ae($core::$errno, $Err::ECST_CID_UNDERSIZED);
 
 		# file too big
 		$post['__testsize'] = filesize($fake_chunk);
 		$post['__testindex'] = 0;
 		$this->_make_request($chup, $rdev, $post, $files);
-		$this->ae($core::$errno, $Err::ECST);
-		$this->ae($core::$data, [$Err::ECST_FSZ_OVERSIZED]);
+		$this->ae($core::$errno, $Err::ECST_FSZ_OVERSIZED);
 
 		# index too big
 		$fls = $this->file_list()[1][0];
@@ -217,22 +213,19 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		$post['__testsize'] = filesize($fake_chunk);
 		$post['__testindex'] = 100000;
 		$this->_make_request($chup, $rdev, $post, $files);
-		$this->ae($core::$errno, $Err::ECST);
-		$this->ae($core::$data, [$Err::ECST_CID_OVERSIZED]);
+		$this->ae($core::$errno, $Err::ECST_CID_OVERSIZED);
 
 		# simulate upload error
 		$files['__testblob']['error'] = UPLOAD_ERR_PARTIAL;
 		$post['__testindex'] = 1;
 		$this->_make_request($chup, $rdev, $post, $files);
-		$this->ae($core::$errno, $Err::EUPL);
-		$this->ae($core::$data, [UPLOAD_ERR_PARTIAL]);
+		$this->ae($core::$errno, UPLOAD_ERR_PARTIAL);
 
 		# chunk too big
 		$files['__testblob']['error'] = UPLOAD_ERR_OK;
 		$post['__testindex'] = 1;
 		$this->_make_request($chup, $rdev, $post, $files);
-		$this->ae($core::$errno, $Err::ECST);
-		$this->ae($core::$data, [$Err::ECST_MCH_OVERSIZED]);
+		$this->ae($core::$errno, $Err::ECST_MCH_OVERSIZED);
 
 		# with fingerprint
 
@@ -248,8 +241,7 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		$post['__testindex'] = 1;
 		$post['__testfingerprint'] = 'wrong-finger';
 		$this->_make_request($chup, $rdev, $post, $files);
-		$this->ae($core::$errno, $Err::ECST);
-		$this->ae($core::$data, [$Err::ECST_FGP_INVALID]);
+		$this->ae($core::$errno, $Err::ECST_FGP_INVALID);
 
 		# chunk size gets too big
 		## fake a chunk from mid sample
@@ -260,8 +252,7 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		$post['__testindex'] = 4;
 		$post['__testfingerprint'] = $chup::get_fingerprint($content);
 		$this->_make_request($chup, $rdev, $post, $files);
-		$this->ae($core::$errno, $Err::ECST);
-		$this->ae($core::$data, [$Err::ECST_MCH_OVERSIZED]);
+		$this->ae($core::$errno, $Err::ECST_MCH_OVERSIZED);
 
 		# success, with valid fingerprint
 		$content = file_get_contents($this->file_list()[0][0]);
@@ -395,10 +386,7 @@ class ChunkUploadTest extends ChunkUploadFixture {
 			$fname, false, false,
 			function($core) use($Err){
 				if ($core::$errno !== 0) {
-					$this->ae($core::$errno,
-						$Err::ECST);
-					$this->ae($core::$data[0],
-						$Err::ECST_FSZ_OVERSIZED);
+					$this->ae($core::$errno, $Err::ECST_FSZ_OVERSIZED);
 				}
 			}
 		);
@@ -413,10 +401,7 @@ class ChunkUploadTest extends ChunkUploadFixture {
 			$fname, false, true,
 			function($core) use($Err){
 				if ($core::$errno !== 0) {
-					$this->ae($core::$errno,
-						$Err::ECST);
-					$this->ae($core::$data[0],
-						$Err::ECST_POSTPROC_FAIL);
+					$this->ae($core::$errno, $Err::ECST_POSTPROC_FAIL);
 				}
 			}
 		);
@@ -434,9 +419,7 @@ class ChunkUploadTest extends ChunkUploadFixture {
 			$fname, false, false,
 			function($core) use($Err) {
 				if (self::$core->faulty) {
-					$this->ae($core::$errno, $Err::ECST);
-					$this->ae($core::$data[0],
-						$Err::ECST_MCH_UNORDERED);
+					$this->ae($core::$errno, $Err::ECST_MCH_UNORDERED);
 				} else {
 					$this->ae($core::$errno, 0);
 				}

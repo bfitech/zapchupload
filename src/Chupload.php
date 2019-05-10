@@ -25,9 +25,9 @@ class ChunkUpload {
 	public static $logger = null;
 
 	// make sure these are the same with client
-	private $post_prefix;
-	private $chunk_size;
-	private $max_filesize;
+	private $post_prefix = '__chupload_';
+	private $chunk_size = 1024 * 100;
+	private $max_filesize = 1024 * 1024 * 10;
 
 	private $with_fingerprint = false;
 
@@ -40,16 +40,16 @@ class ChunkUpload {
 	 * @param object $core A core instance.
 	 * @param string $tempdir Temporary upload directory.
 	 * @param string $destdir Destination directory.
-	 * @param string|null $post_prefix POST data prefix.
-	 * @param int|null $chunk_size Chunk size, defaults to 2M.
-	 * @param int|null $max_filesize Maximum filesize, defaults
-	 *     to 10M.
+	 * @param string $post_prefix POST data prefix. Defaults to
+	 *     '__chupload_'.
+	 * @param int $chunk_size Chunk size, defaults to 2M.
+	 * @param int $max_filesize Maximum filesize, defaults to 10M.
 	 * @param bool $with_fingerprint If true, fingerprint will
-	 *     be verified by $this->check_fingerprint() after each
+	 *     be verified by ChunkUpload::check_fingerprint() after each
 	 *     chunk upload is complete.
-	 * @param object|null $logger An instance of logging service.
-	 *     If left as null, default logger is used, implying
-	 *     error level and usage of STDERR.
+	 * @param object $logger An instance of logging service.
+	 *     If left as null, default logger is used, with error log
+	 *     level and STDERR handle.
 	 *
 	 * @cond
 	 * @SuppressWarnings(PHPMD.CyclomaticComplexity)
@@ -65,36 +65,26 @@ class ChunkUpload {
 		self::$core = $core;
 		self::$logger = $logger = $logger ?? new Logger;
 
-		// defaults
-		$this->post_prefix = '__chupload_';
-		$this->chunk_size = 1024 * 100;
-		$this->max_filesize = 1024 * 1024 * 10;
+		if ($post_prefix)
+			$this->post_prefix = $post_prefix;
 
-		if ($post_prefix !== null)
-			$this->post_prefix = (string)$post_prefix;
-
-		$this->with_fingerprint = (bool)$with_fingerprint;
+		$this->with_fingerprint = $with_fingerprint;
 
 		if ($chunk_size) {
-			$chunk_size = (int)$chunk_size;
-			if ($chunk_size > 1024 * 1024 * 2) {
+			if ($chunk_size > $this->chunk_size) {
 				$logger->warning(
 					"Chupload: chunk size > 2M. Default 100k is used.");
-				$chunk_size = null;
 			} elseif ($chunk_size < 1024) {
 				$logger->warning(
 					"Chupload: chunk size < 1k. Default 100k is used.");
-				$chunk_size = null;
 			} else {
 				$logger->debug(
 					"Chupload: using chunk size: $chunk_size.");
+				$this->chunk_size = $chunk_size;
 			}
 		}
-		if ($chunk_size)
-			$this->chunk_size = $chunk_size;
 
 		if ($max_filesize) {
-			$max_filesize = (int)$max_filesize;
 			if ($max_filesize < $this->chunk_size) {
 				$logger->warning(
 					"Chupload: max filesize < chunk size. ".
@@ -195,19 +185,15 @@ class ChunkUpload {
 	public static function json(array $resp) {
 		$Err = new ChunkUploadError;
 		$errno = $resp[0];
-		$data = isset($resp[1]) ? $resp[1] : [];
+		$data = isset($resp[1]) ? $resp[1] : null;
 
 		$http_code = 200;
-		if (in_array($errno, [
-			$Err::EREQ,
-			$Err::ECST,
-		])) {
+		if ($errno !== 0) {
 			$http_code = 403;
-		} elseif (in_array($errno, [
-			$Err::EUPL,
-			$Err::EDIO,
-		])) {
-			$http_code = 503;
+			// @codeCoverageIgnoreStart
+			if ($errno === $Err::EDIO)
+				$http_code = 503;
+			// @codeCoverageIgnoreEnd
 		}
 		self::$core->print_json($errno, $data, $http_code);
 	}
@@ -238,7 +224,7 @@ class ChunkUpload {
 		if (!$files || !isset($files[$this->post_prefix . 'blob'])) {
 			# file field incomplete
 			$logger->warning("Chupload: chunk not received.");
-			return [$Err::EREQ, [$Err::EREQ_NO_CHUNK]];
+			return [$Err::EREQ_NO_CHUNK];
 		}
 
 		$keys = ['name', 'size', 'index'];
@@ -252,16 +238,15 @@ class ChunkUpload {
 				# post field incomplete
 				$logger->warning(
 					"Chupload: '$key' form data not received.");
-				return [$Err::EREQ, [$Err::EREQ_DATA_INCOMPLETE]];
+				return [$Err::EREQ_DATA_INCOMPLETE];
 			}
 			$vals[$key] = $post[$pfx . $key];
 		}
 
 		$blob = $files[$pfx . 'blob'];
 		if ($blob['error'] !== 0) {
-			# generic upload error
 			$logger->error("Chupload: upload error: {$blob['error']}.");
-			return [$Err::EUPL, [$blob['error']]];
+			return [$blob['error']];
 		}
 		$vals['blob'] = $blob;
 
@@ -285,30 +270,30 @@ class ChunkUpload {
 		if ($size < 1) {
 			# size violation
 			$logger->warning("Chupload: invalid filesize.");
-			return [$Err::ECST, [$Err::ECST_FSZ_INVALID]];
+			return [$Err::ECST_FSZ_INVALID];
 		}
 		$index = intval($index);
 		if ($index < 0) {
 			# index undersized
 			$logger->warning("Chupload: invalid chunk index.");
-			return [$Err::ECST, [$Err::ECST_CID_UNDERSIZED]];
+			return [$Err::ECST_CID_UNDERSIZED];
 		}
 		if ($size > $this->max_filesize) {
 			# max size violation
 			$logger->warning("Chupload: max filesize violation.");
-			return [$Err::ECST, [$Err::ECST_FSZ_OVERSIZED]];
+			return [$Err::ECST_FSZ_OVERSIZED];
 		}
 		if ($index * $this->chunk_size > $this->max_filesize) {
 			# index oversized
 			$logger->warning("Chupload: chunk index violation.");
-			return [$Err::ECST, [$Err::ECST_CID_OVERSIZED]];
+			return [$Err::ECST_CID_OVERSIZED];
 		}
 		$chunk_path = $blob['tmp_name'];
 		if (filesize($chunk_path) > $this->chunk_size) {
 			# chunk oversized
 			$logger->warning("Chupload: invalid chunk index.");
 			$this->unlink($chunk_path);
-			return [$Err::ECST, [$Err::ECST_MCH_OVERSIZED]];
+			return [$Err::ECST_MCH_OVERSIZED];
 		}
 
 		$max_chunk_s = $size / $this->chunk_size;
@@ -326,7 +311,7 @@ class ChunkUpload {
 		# make sure get_basename() guarantee uniqueness
 		// @codeCoverageIgnoreStart
 		if (file_exists($destname) && !$this->unlink($destname))
-			return [$Err::EDIO, []];
+			return [$Err::EDIO];
 		// @codeCoverageIgnoreEnd
 
 		return [0, [
@@ -394,7 +379,7 @@ class ChunkUpload {
 			# single or last chunk
 			$chunk = fread($fhi, $this->chunk_size);
 			if (filesize($tempname) > $this->chunk_size)
-				return [$Err::ECST, [$Err::ECST_MCH_OVERSIZED]];
+				return [$Err::ECST_MCH_OVERSIZED];
 			fwrite($fho, $chunk);
 			return [0];
 		}
@@ -403,14 +388,14 @@ class ChunkUpload {
 			$chunk = fread($fhi, $this->chunk_size);
 			$total += $this->chunk_size;
 			if ($total > $this->max_filesize)
-				return [$Err::ECST, [$Err::ECST_FSZ_INVALID]];
+				return [$Err::ECST_FSZ_INVALID];
 			fwrite($fho, $chunk);
 			$tail = fread($fhi, 2);
 			if (strlen($tail) < 2)
-				return [$Err::ECST, [$Err::ECST_MCH_UNORDERED]];
+				return [$Err::ECST_MCH_UNORDERED];
 			$i_unpack = unpack('vint', $tail)['int'];
 			if ($i !== $i_unpack)
-				return [$Err::ECST, [$Err::ECST_MCH_UNORDERED]];
+				return [$Err::ECST_MCH_UNORDERED];
 		}
 		$chunk = fread($fhi, $this->chunk_size);
 		fwrite($fho, $chunk);
@@ -454,7 +439,7 @@ class ChunkUpload {
 			# fingerprint violation
 			$logger->warning("Chupload: fingerprint doesn't match.");
 			$this->unlink($tempname);
-			return static::json([$Err::ECST, [$Err::ECST_FGP_INVALID]]);
+			return static::json([$Err::ECST_FGP_INVALID]);
 		}
 
 		// merge chunks on finish
@@ -475,7 +460,7 @@ class ChunkUpload {
 					$this->unlink($destname);
 				$logger->error("Chupload: post-processing failed.");
 				return static::json(
-					[$Err::ECST, [$Err::ECST_POSTPROC_FAIL]]);
+					[$Err::ECST_POSTPROC_FAIL]);
 			}
 
 		}
