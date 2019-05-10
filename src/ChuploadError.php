@@ -29,16 +29,18 @@ class ChunkUploadError extends \Exception {
 	const ECST_FSZ_OVERSIZED = 0x0302;
 	/** Chunk index too big. */
 	const ECST_CID_OVERSIZED = 0x0303;
-	/** Chunk index too big. */
+	/** Chunk index invalid. */
 	const ECST_CID_INVALID = 0x0304;
-	/** Chunk fingerprint invalid. */
-	const ECST_FGP_INVALID = 0x0305;
 	/** Merged chunk exceeds max filesize. */
 	const ECST_MCH_OVERSIZED = 0x0306;
 	/** Messed up chunk order. */
 	const ECST_MCH_UNORDERED = 0x0307;
 	/** Post-proc failed. */
-	const ECST_POSTPROC_FAIL = 0x0308;
+	const ECST_PREPROC_FAIL = 0x0308;
+	/** Post-proc failed. */
+	const ECST_CHUNKPROC_FAIL = 0x0309;
+	/** Post-proc failed. */
+	const ECST_POSTPROC_FAIL = 0x0310;
 
 	/* upload error */
 

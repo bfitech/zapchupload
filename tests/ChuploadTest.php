@@ -3,40 +3,48 @@
 
 require_once(__DIR__ . '/ChuploadFixture.php');
 
-
 use BFITech\ZapCore\Logger;
 use BFITech\ZapCoreDev\RouterDev;
 use BFITech\ZapCoreDev\RoutingDev;
 use BFITech\ZapChupload\ChunkUpload;
-use BFITech\ZapChupload\ChunkUploadError;
+use BFITech\ZapChupload\ChunkUploadError as Err;
 
 
 /**
- * Patched class with fingerprinting.
+ * Patched class where post-processing always fails.
  */
-class ChunkUploadPatched extends ChunkUpload {
+class ChunkUploadChunkProc extends ChunkUpload {
 
 	public static function get_fingerprint(string $chunk) {
 		return hash_hmac('sha512', $chunk, 'sekrit');
 	}
 
-	public function make_fingerprint(string $chunk) {
-		return self::get_fingerprint($chunk);
+	public function pre_processing(array $args, array $chunk_data) {
+		$post = $args['post'];
+		return !isset($post['dontsend']);
 	}
 
-	public function check_fingerprint(
-		string $fingerprint, string $chunk_recv
-	) {
-		return hash_equals($fingerprint,
-			$this->make_fingerprint($chunk_recv));
+	public function chunk_processing(array $args, array $chunk_data) {
+		$post = $args['post'];
+		if (!isset($post['fingerprint']))
+			return false;
+		$hash = self::get_fingerprint($chunk_data['chunk']);
+		return hash_equals($post['fingerprint'], $hash);
 	}
 
 }
 
-/**
- * Patched class where post-processing always fails.
- */
-class ChunkUploadPostProc extends ChunkUploadPatched {
+class ChunkUploadIntercept extends ChunkUploadChunkProc {
+
+	public function intercept_response(
+		int $errno, array $data=null, int $http_code=200
+	) {
+		self::$core->print_json($errno, $data, $http_code);
+		return false;
+	}
+}
+
+class ChunkUploadPostProc extends ChunkUpload {
 
 	public function post_processing(array $args, array $chunk_data) {
 		return false;
@@ -63,88 +71,74 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		$logger = new Logger(Logger::ERROR, self::$logfile);
 		$core = (new RouterDev)->config('logger', $logger);
 		$tdir = self::$tdir;
-		$Err = new ChunkUploadError;
 
 		$csz_too_small = pow(2, 8);
 		$csz_too_yuuge = pow(2, 24);
 
-		$chup = new ChunkUploadPatched(
+		$chup = new ChunkUpload(
 			$core, $tdir . '/xtemp', $tdir . '/xdest',
 			'_some_pfx', $csz_too_small, MAX_FILESIZE,
-			true, $logger
+			$logger
 		);
 		$this->ae($chup->get_chunk_size(), 1024 * 100);
 
-		$chup = new ChunkUploadPatched(
+		$chup = new ChunkUpload(
 			$core, $tdir . '/xtemp', $tdir . '/xdest',
-			'_some_pfx', $csz_too_yuuge, MAX_FILESIZE,
-			true, $logger
+			'_some_pfx', $csz_too_yuuge, MAX_FILESIZE, $logger
 		);
 		$this->ae($chup->get_chunk_size(), 1024 * 100);
 
-		$chup = new ChunkUploadPatched(
+		$chup = new ChunkUpload(
 			$core, $tdir . '/xtemp', $tdir . '/xdest',
-			'_some_pfx', CHUNK_SIZE, MAX_FILESIZE,
-			true, $logger
+			'_some_pfx', CHUNK_SIZE, MAX_FILESIZE, $logger
 		);
 		$this->ae($chup->get_chunk_size(), CHUNK_SIZE);
 		$this->ae($chup->get_post_prefix(), '_some_pfx');
 		$this->ae($chup->get_max_filesize(), MAX_FILESIZE);
 
-		$chup = new ChunkUploadPatched(
+		$chup = new ChunkUpload(
 			$core, $tdir . '/xtemp', $tdir . '/xdest',
-			'_some_pfx', CHUNK_SIZE, CHUNK_SIZE - 1,
-			true, $logger
+			'_some_pfx', CHUNK_SIZE, CHUNK_SIZE - 1, $logger
 		);
 
 		try {
-			$chup = new ChunkUploadPatched(
+			$chup = new ChunkUpload(
 				$core, '', '',
-				'_some_pfx', CHUNK_SIZE, MAX_FILESIZE,
-				true, $logger
+				'_some_pfx', CHUNK_SIZE, MAX_FILESIZE, $logger
 			);
-		} catch(ChunkUploadError $e) {
+		} catch(Err $e) {
 		}
 
 		try {
-			$chup = new ChunkUploadPatched(
+			$chup = new ChunkUpload(
 				$core, 'x', 'x',
-				'_some_pfx', CHUNK_SIZE, MAX_FILESIZE,
-				true, $logger
+				'_some_pfx', CHUNK_SIZE, MAX_FILESIZE, $logger
 			);
-		} catch(ChunkUploadError $e) {
+		} catch(Err $e) {
 		}
 
 		try {
-			$chup = new ChunkUploadPatched(
+			$chup = new ChunkUpload(
 				$core, '/var/chupload/xtemp', '/var/chupload/xdest',
-				'_some_pfx', CHUNK_SIZE, MAX_FILESIZE,
-				true, $logger
+				'_some_pfx', CHUNK_SIZE, MAX_FILESIZE, $logger
 			);
-		} catch(ChunkUploadError $e) {
+		} catch(Err $e) {
 		}
 	}
 
 	/**
 	 * Make uploader based on patched classes.
 	 */
-	private function _make_uploader(
-		$with_fingerprint=false, $postproc=false
-	) {
+	private function _make_uploader($cls='') {
 		$logger = new Logger(Logger::DEBUG, self::$logfile);
 		self::$core = $core = (new RouterDev)
 			->config('home', '/')
 			->config('logger', $logger);
-		if ($postproc)
-			return new ChunkUploadPostProc(
-				$core, self::$tdir . '/xtemp', self::$tdir . '/xdest',
-				'__test', CHUNK_SIZE, MAX_FILESIZE,
-				$with_fingerprint, $logger
-			);
-		return new ChunkUploadPatched(
+		if (!$cls)
+			$cls = 'BFITech\ZapChupload\ChunkUpload';
+		return new $cls(
 			$core, self::$tdir . '/xtemp', self::$tdir . '/xdest',
-			'__test', CHUNK_SIZE, MAX_FILESIZE,
-			$with_fingerprint, $logger
+			'__test', CHUNK_SIZE, MAX_FILESIZE, $logger
 		);
 	}
 
@@ -159,8 +153,6 @@ class ChunkUploadTest extends ChunkUploadFixture {
 	}
 
 	public function test_upload_request() {
-		$Err = new ChunkUploadError;
-
 		$chup = $this->_make_uploader();
 		$core = $chup::$core;
 		$rdev = new RoutingDev($core);
@@ -172,7 +164,7 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		];
 		$files = [];
 		$this->_make_request($chup, $rdev, $post, $files);
-		$this->ae($core::$errno, $Err::EREQ_NO_CHUNK);
+		$this->ae($core::$errno, Err::EREQ_NO_CHUNK);
 
 		$fake_chunk = self::$tdir . '/fakechunk.dat';
 		$fls = $this->file_list()[2][0];
@@ -186,25 +178,25 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		];
 		$this->_make_request($chup, $rdev, $post, $files);
 		$this->ae($core::$code, 403);
-		$this->ae($core::$errno, $Err::EREQ_DATA_INCOMPLETE);
+		$this->ae($core::$errno, Err::EREQ_DATA_INCOMPLETE);
 
 		# invalid filesize
 		$post['__testsize'] = -1;
 		$post['__testindex'] = -1;
 		$this->_make_request($chup, $rdev, $post, $files);
-		$this->ae($core::$errno, $Err::ECST_FSZ_INVALID);
+		$this->ae($core::$errno, Err::ECST_FSZ_INVALID);
 
 		# index too small
 		$post['__testsize'] = 1000;
 		$post['__testindex'] = -1;
 		$this->_make_request($chup, $rdev, $post, $files);
-		$this->ae($core::$errno, $Err::ECST_CID_UNDERSIZED);
+		$this->ae($core::$errno, Err::ECST_CID_UNDERSIZED);
 
 		# file too big
 		$post['__testsize'] = filesize($fake_chunk);
 		$post['__testindex'] = 0;
 		$this->_make_request($chup, $rdev, $post, $files);
-		$this->ae($core::$errno, $Err::ECST_FSZ_OVERSIZED);
+		$this->ae($core::$errno, Err::ECST_FSZ_OVERSIZED);
 
 		# index too big
 		$fls = $this->file_list()[1][0];
@@ -213,7 +205,7 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		$post['__testsize'] = filesize($fake_chunk);
 		$post['__testindex'] = 100000;
 		$this->_make_request($chup, $rdev, $post, $files);
-		$this->ae($core::$errno, $Err::ECST_CID_OVERSIZED);
+		$this->ae($core::$errno, Err::ECST_CID_OVERSIZED);
 
 		# simulate upload error
 		$files['__testblob']['error'] = UPLOAD_ERR_PARTIAL;
@@ -225,23 +217,32 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		$files['__testblob']['error'] = UPLOAD_ERR_OK;
 		$post['__testindex'] = 1;
 		$this->_make_request($chup, $rdev, $post, $files);
-		$this->ae($core::$errno, $Err::ECST_MCH_OVERSIZED);
+		$this->ae($core::$errno, Err::ECST_MCH_OVERSIZED);
 
-		# with fingerprint
+		## pre-processing and chunk processing
 
-		$chup = $this->_make_uploader(true);
+		$chup = $this->_make_uploader('ChunkUploadChunkProc');
 		$core = $chup::$core;
 		$rdev = new RoutingDev($core);
 
-		# invalid fingerprint
+		# failed pre-processing
 		## fake a chunk from small sample
 		$content = file_get_contents($this->file_list()[0][0]);
 		file_put_contents($fake_chunk, $content);
+		$post['__testindex'] = 0;
 		$post['__testsize'] = filesize($fake_chunk);
-		$post['__testindex'] = 1;
-		$post['__testfingerprint'] = 'wrong-finger';
+		$post['dontsend'] = 1;
 		$this->_make_request($chup, $rdev, $post, $files);
-		$this->ae($core::$errno, $Err::ECST_FGP_INVALID);
+		$this->ae($core::$errno, Err::ECST_PREPROC_FAIL);
+		unset($post['dontsend']);
+
+		# invalid chunk processing
+		file_put_contents($fake_chunk, $content);
+		$post['__testindex'] = 1;
+		$post['__testsize'] = filesize($fake_chunk);
+		$post['fingerprint'] = 'wrong-finger';
+		$this->_make_request($chup, $rdev, $post, $files);
+		$this->ae($core::$errno, Err::ECST_CHUNKPROC_FAIL);
 
 		# chunk size gets too big
 		## fake a chunk from mid sample
@@ -250,11 +251,15 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		file_put_contents($fake_chunk, $content);
 		$post['__testsize'] = filesize($fake_chunk);
 		$post['__testindex'] = 4;
-		$post['__testfingerprint'] = $chup::get_fingerprint($content);
+		$post['fingerprint'] = $chup::get_fingerprint($content);
 		$this->_make_request($chup, $rdev, $post, $files);
-		$this->ae($core::$errno, $Err::ECST_MCH_OVERSIZED);
+		$this->ae($core::$errno, Err::ECST_MCH_OVERSIZED);
 
-		# success, with valid fingerprint
+		$chup = $this->_make_uploader('ChunkUploadIntercept');
+		$core = $chup::$core;
+		$rdev = new RoutingDev($core);
+
+		# success, with valid chunk processing
 		$content = file_get_contents($this->file_list()[0][0]);
 		file_put_contents($fake_chunk, $content);
 		$files['__testblob'] = [
@@ -263,10 +268,11 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		];
 		$post['__testsize'] = filesize($fake_chunk);
 		$post['__testindex'] = 0;
-		$post['__testfingerprint'] = $chup::get_fingerprint($content);
+		$post['fingerprint'] = $chup::get_fingerprint($content);
 		$this->_make_request($chup, $rdev, $post, $files);
 		$this->ae($core::$errno, 0);
 		$this->ae($core::$data['path'], $post['__testname']);
+
 	}
 
 	/**
@@ -327,10 +333,9 @@ class ChunkUploadTest extends ChunkUploadFixture {
 	 * modify request args.
 	 */
 	private function _process_chunks(
-		$fname, $with_fingerprint=false, $postproc=false,
-		$callback_res=null, $callback_req=null
+		$fname, $callback_res=null, $callback_req=null, $cls=''
 	) {
-		$chup = $this->_make_uploader($with_fingerprint, $postproc);
+		$chup = $this->_make_uploader($cls);
 		$rdev = new RoutingDev($chup::$core);
 
 		$this->upload_chunks(
@@ -380,14 +385,11 @@ class ChunkUploadTest extends ChunkUploadFixture {
 	}
 
 	public function test_upload_file_too_big() {
-		$Err = new ChunkUploadError;
 		$fname = self::file_list()[2][0];
 		$this->_process_chunks(
-			$fname, false, false,
-			function($core) use($Err){
-				if ($core::$errno !== 0) {
-					$this->ae($core::$errno, $Err::ECST_FSZ_OVERSIZED);
-				}
+			$fname, function($core) {
+				if ($core::$errno !== 0)
+					$this->ae($core::$errno, Err::ECST_FSZ_OVERSIZED);
 			}
 		);
 		$dname = self::$tdir . '/xdest/' . basename($fname);
@@ -395,14 +397,12 @@ class ChunkUploadTest extends ChunkUploadFixture {
 	}
 
 	public function test_upload_file_failed_postproc() {
-		$Err = new ChunkUploadError;
 		$fname = self::file_list()[0][0];
 		$this->_process_chunks(
-			$fname, false, true,
-			function($core) use($Err){
+			$fname, function($core) {
 				if ($core::$errno !== 0)
-					$this->ae($core::$errno, $Err::ECST_POSTPROC_FAIL);
-			}
+					$this->ae($core::$errno, Err::ECST_POSTPROC_FAIL);
+			}, null, 'ChunkUploadPostProc'
 		);
 		$dname = self::$tdir . '/xdest/' . basename($fname);
 		$this->assertFalse(file_exists($dname));
@@ -412,13 +412,12 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		# @note When index sequence is messed up, upload goes on until
 		#     the end. It's the unpacker that will invalidate it.
 		#     There's no fail-early mechanism when this happens.
-		$Err = new ChunkUploadError;
 		$fname = self::file_list()[1][0];
 		$this->_process_chunks(
-			$fname, false, false,
-			function($core) use($Err) {
+			$fname,
+			function($core) {
 				if (self::$core->faulty) {
-					$this->ae($core::$errno, $Err::ECST_MCH_UNORDERED);
+					$this->ae($core::$errno, Err::ECST_MCH_UNORDERED);
 				} else {
 					$this->ae($core::$errno, 0);
 				}
