@@ -19,16 +19,16 @@ class ChunkUploadChunkProc extends ChunkUpload {
 		return hash_hmac('sha512', $chunk, 'sekrit');
 	}
 
-	public function pre_processing(array $args, array $chunk_data) {
-		$post = $args['post'];
+	protected function pre_processing() {
+		$post = $this->get_args()['post'];
 		return !isset($post['dontsend']);
 	}
 
-	public function chunk_processing(array $args, array $chunk_data) {
-		$post = $args['post'];
+	protected function chunk_processing() {
+		$post = $this->get_args()['post'];
 		if (!isset($post['fingerprint']))
 			return false;
-		$hash = self::get_fingerprint($chunk_data['chunk']);
+		$hash = self::get_fingerprint($this->get_chunk_data()['chunk']);
 		return hash_equals($post['fingerprint'], $hash);
 	}
 
@@ -46,7 +46,7 @@ class ChunkUploadIntercept extends ChunkUploadChunkProc {
 
 class ChunkUploadPostProc extends ChunkUpload {
 
-	public function post_processing(array $args, array $chunk_data) {
+	protected function post_processing() {
 		return false;
 	}
 
@@ -81,6 +81,18 @@ class ChunkUploadTest extends ChunkUploadFixture {
 			$logger
 		);
 		$this->ae($chup->get_chunk_size(), 1024 * 100);
+		try {
+			$chup->get_args();
+		} catch(Err $e) {
+		}
+		try {
+			$chup->get_request();
+		} catch(Err $e) {
+		}
+		try {
+			$chup->get_chunk_data();
+		} catch(Err $e) {
+		}
 
 		$chup = new ChunkUpload(
 			$core, $tdir . '/xtemp', $tdir . '/xdest',
@@ -211,6 +223,7 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		$files['__testblob']['error'] = UPLOAD_ERR_PARTIAL;
 		$post['__testindex'] = 1;
 		$this->_make_request($chup, $rdev, $post, $files);
+		$this->ae($core::$code, 503);
 		$this->ae($core::$errno, UPLOAD_ERR_PARTIAL);
 
 		# chunk too big

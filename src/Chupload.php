@@ -33,6 +33,12 @@ class ChunkUpload {
 	private $tempdir = null;
 	private $destdir = null;
 
+	private $args = [];
+	private $request = [];
+	private $chunk_data = [];
+
+	private $upload_error = false;
+
 	/**
 	 * Constructor.
 	 *
@@ -122,14 +128,11 @@ class ChunkUpload {
 	 * Default basename generator.
 	 *
 	 * Override this if you want to rename uploaded file according to
-	 * certain rule. This only determine the basename, not the entire
-	 * absolute path.
-	 *
-	 * @param string $path Path to a file.
-	 * @return string Destination file basename.
+	 * certain rule. This should only determine the basename, not the
+	 * entire absolute path.
 	 */
-	protected function get_basename(string $path) {
-		return basename($path);
+	protected function get_basename() {
+		return basename($this->get_request()['name']);
 	}
 
 	/**
@@ -139,23 +142,9 @@ class ChunkUpload {
 	 * to determine whether upload must proceed after certain
 	 * pre-conditions are met.
 	 *
-	 * @param dict $args ZapCore Router arguments.
-	 * @param dict $chunk_data Dict of chunk data with keys:
-	 *     - `(int)size`, total filesize
-	 *     - `(int)index`, chunk index
-	 *     - `(string)chunk_path`, chunk absolute path
-	 *     - `(int)max_chunk`, max chunk
-	 *     - `(string)chunk`, chunk blob as string
-	 *     - `(string)basename`, file basename
-	 *     - `(string)tempname`, file absolute tempname
-	 *     - `(string)destname`, file absolute destination
 	 * @return bool True on success.
-	 *
-	 * @cond
-	 * @SuppressWarnings(PHPMD.UnusedFormalParameter)
-	 * @endcond
 	 */
-	protected function pre_processing(array $args, array $chunk_data) {
+	protected function pre_processing() {
 		return true;
 	}
 
@@ -164,18 +153,9 @@ class ChunkUpload {
 	 *
 	 * Use this for chunk-specific processing, e.g. fingerprinting.
 	 *
-	 * @param dict $args ZapCore router arguments.
-	 * @param dict $chunk_data Dict of chunk data. See
-	 *     Chupload::pre_processing.
 	 * @return bool True on success.
-	 *
-	 * @cond
-	 * @SuppressWarnings(PHPMD.UnusedFormalParameter)
-	 * @endcond
 	 */
-	protected function chunk_processing(
-		array $args, array $chunk_data
-	) {
+	protected function chunk_processing() {
 		return true;
 	}
 
@@ -188,16 +168,10 @@ class ChunkUpload {
 	 * return of this method always true. Also useful if you want to
 	 * integrate Chupload as a part of generic zapcore routing handler.
 	 *
-	 * @param dict $args ZapCore router arguments.
-	 * @param dict $chunk_data Dict of chunk data. See
-	 *     Chupload::pre_processing.
 	 * @return bool True on success.
 	 *
-	 * @cond
-	 * @SuppressWarnings(PHPMD.UnusedFormalParameter)
-	 * @endcond
 	 */
-	protected function post_processing(array $args, array $chunk_data) {
+	protected function post_processing() {
 		return true;
 	}
 
@@ -205,7 +179,8 @@ class ChunkUpload {
 	 * Wrap JSON response.
 	 *
 	 * This is different from typical core JSON since it's related to
-	 * upload end status.
+	 * upload end status. I/O or upload error will emit HTTP status
+	 * 503.
 	 */
 	private function json(array $resp) {
 		$Err = new ChunkUploadError;
@@ -216,7 +191,7 @@ class ChunkUpload {
 		if ($errno !== 0) {
 			$http_code = 403;
 			// @codeCoverageIgnoreStart
-			if ($errno === $Err::EDIO)
+			if ($errno === $Err::EDIO || $this->upload_error)
 				$http_code = 503;
 			// @codeCoverageIgnoreEnd
 		}
@@ -264,17 +239,18 @@ class ChunkUpload {
 	/**
 	 * Verify request.
 	 */
-	private function check_request(array $args) {
+	private function check_request() {
 		$Err = new ChunkUploadError;
-		$logger = self::$logger;
+		$log = self::$logger;
+		$args = $this->args;
 
 		$post = $args['post'];
 		$files = $args['files'];
 
 		if (!$files || !isset($files[$this->post_prefix . 'blob'])) {
 			# file field incomplete
-			$logger->warning("Chupload: chunk not received.");
-			return [$Err::EREQ_NO_CHUNK];
+			$log->warning("Chupload: chunk not received.");
+			return $Err::EREQ_NO_CHUNK;
 		}
 
 		$keys = ['name', 'size', 'index'];
@@ -284,61 +260,64 @@ class ChunkUpload {
 		foreach($keys as $key) {
 			if (!isset($post[$pfx . $key])) {
 				# post field incomplete
-				$logger->warning(
+				$log->warning(
 					"Chupload: '$key' form data not received.");
-				return [$Err::EREQ_DATA_INCOMPLETE];
+				return $Err::EREQ_DATA_INCOMPLETE;
 			}
 			$vals[$key] = $post[$pfx . $key];
 		}
 
 		$blob = $files[$pfx . 'blob'];
 		if ($blob['error'] !== 0) {
-			$logger->error("Chupload: upload error: {$blob['error']}.");
-			return [$blob['error']];
+			$this->upload_error = true;
+			$log->error("Chupload: upload error: {$blob['error']}.");
+			return $blob['error'];
 		}
 		$vals['blob'] = $blob;
 
-		return [0, $vals];
+		$this->request = $vals;
+		return 0;
 	}
 
 	/**
 	 * Verifiy new chunk.
 	 */
-	private function check_constraints(array $request) {
+	private function check_constraints() {
 		$Err = new ChunkUploadError;
 		$logger = self::$logger;
+		$request = $this->request;
 
-		$name = $size = $index = $blob = null;
+		$size = $index = $blob = null;
 		extract($request);
 
 		$size = intval($size);
 		if ($size < 1) {
 			# size violation
 			$logger->warning("Chupload: invalid filesize.");
-			return [$Err::ECST_FSZ_INVALID];
+			return $Err::ECST_FSZ_INVALID;
 		}
 		$index = intval($index);
 		if ($index < 0) {
 			# index undersized
 			$logger->warning("Chupload: invalid chunk index.");
-			return [$Err::ECST_CID_UNDERSIZED];
+			return $Err::ECST_CID_UNDERSIZED;
 		}
 		if ($size > $this->max_filesize) {
 			# max size violation
 			$logger->warning("Chupload: max filesize violation.");
-			return [$Err::ECST_FSZ_OVERSIZED];
+			return $Err::ECST_FSZ_OVERSIZED;
 		}
 		if ($index * $this->chunk_size > $this->max_filesize) {
 			# index oversized
 			$logger->warning("Chupload: chunk index violation.");
-			return [$Err::ECST_CID_OVERSIZED];
+			return $Err::ECST_CID_OVERSIZED;
 		}
 		$chunk_path = $blob['tmp_name'];
 		if (filesize($chunk_path) > $this->chunk_size) {
 			# chunk oversized
 			$logger->warning("Chupload: invalid chunk index.");
 			$this->unlink($chunk_path);
-			return [$Err::ECST_MCH_OVERSIZED];
+			return $Err::ECST_MCH_OVERSIZED;
 		}
 
 		$max_chunk_float = $size / $this->chunk_size;
@@ -348,7 +327,7 @@ class ChunkUpload {
 
 		$chunk = file_get_contents($chunk_path);
 
-		$basename = $this->get_basename($name);
+		$basename = $this->get_basename();
 		$tempname = $this->tempdir . '/' . $basename;
 		$destname = $this->destdir . '/' . $basename;
 
@@ -356,10 +335,10 @@ class ChunkUpload {
 		# make sure get_basename() guarantee uniqueness
 		// @codeCoverageIgnoreStart
 		if (file_exists($destname) && !$this->unlink($destname))
-			return [$Err::EDIO];
+			return $Err::EDIO;
 		// @codeCoverageIgnoreEnd
 
-		return [0, [
+		$this->chunk_data = [
 			'size' => $size,
 			'index' => $index,
 			'chunk_path' => $chunk_path,
@@ -368,17 +347,19 @@ class ChunkUpload {
 			'basename' => $basename,
 			'tempname' => $tempname,
 			'destname' => $destname,
-		]];
+		];
+
+		return 0;
 	}
 
 	/**
 	 * Append new chunk to packed chunks.
 	 */
-	private function pack_chunk(array $constraints) {
+	private function pack_chunk() {
 		$Err = new ChunkUploadError;
 
 		$index = $chunk = $chunk_path = null;
-		extract($constraints);
+		extract($this->chunk_data);
 
 		# truncate or append
 		$fhn = @fopen($tempname, ($index === 0 ? 'wb' : 'ab'));
@@ -404,10 +385,10 @@ class ChunkUpload {
 	/**
 	 * Merge packed chunks to destination.
 	 */
-	private function merge_chunks(
-		string $tempname, string $destname, int $max_chunk
-	) {
+	private function merge_chunks() {
 		$Err = new ChunkUploadError;
+		$tempname = $destname = $max_chunk = null;
+		extract($this->chunk_data);
 		if (
 			false === ($fhi = @fopen($tempname, 'rb')) ||
 			false === ($fho = @fopen($destname, 'wb'))
@@ -420,7 +401,7 @@ class ChunkUpload {
 			return $Err::EDIO;
 			// @codeCoverageIgnoreEnd
 		}
-		if ($max_chunk === 0) {
+		if ($max_chunk == 0) {
 			# single or last chunk
 			$chunk = fread($fhi, $this->chunk_size);
 			if (filesize($tempname) > $this->chunk_size)
@@ -450,22 +431,20 @@ class ChunkUpload {
 	/**
 	 * Finalize merging and execute post-processor.
 	 */
-	private function finalize(array $args, array $chunk_data) {
+	private function finalize() {
 		$log = self::$logger;
-		$tempname = $destname = $max_chunk = null;
-		extract($chunk_data);
+		$tempname = $destname = null;
+		extract($this->chunk_data);
 
-		$merge_status = $this->merge_chunks(
-			$tempname, $destname, $max_chunk);
+		$merge_status = $this->merge_chunks();
+		$this->unlink($tempname);
 		if ($merge_status !== 0) {
-			$this->unlink($tempname);
 			$this->unlink($destname);
 			$log->warning("Chupload: broken chunk.");
 			return $merge_status;
 		}
-		$this->unlink($tempname);
 
-		if (!$this->post_processing($args, $chunk_data)) {
+		if (!$this->post_processing()) {
 			if (file_exists($destname))
 				$this->unlink($destname);
 			$log->error("Chupload: post-processing failed.");
@@ -481,47 +460,90 @@ class ChunkUpload {
 	 */
 	public function upload(array $args) {
 		$Err = new ChunkUploadError;
-		$logger = self::$logger;
+		$this->args = $args;
 
-		$request = $this->check_request($args);
-		if ($request[0] !== 0)
-			return $this->json($request);
-		extract($request[1]);
+		# check request
+		if (0 !== $check = $this->check_request())
+			return $this->json([$check]);
 
-		$constraints = $this->check_constraints($request[1]);
-		if ($constraints[0] !== 0)
-			return $this->json($constraints);
-		$chunk_data = $constraints[1];
+		# check constraints
+		if (0 !== $check = $this->check_constraints())
+			return $this->json([$check]);
 
-		if (0 !== $packed = $this->pack_chunk($chunk_data))
-			return $this->json([$packed]);
+		# pack chunk
+		if (0 !== $check = $this->pack_chunk())
+			return $this->json([$check]);
 
 		$basename = $index = $max_chunk = null;
-		extract($chunk_data);
-		$index = intval($index);
-		$max_chunk = intval($max_chunk);
+		extract($this->chunk_data);
 
 		// pre-processing
-		if ($index === 0 && !$this->pre_processing($args, $chunk_data))
+		if ($index == 0 && !$this->pre_processing())
 			return $this->json([$Err::ECST_PREPROC_FAIL]);
 
 		// chunk processing
-		if (!$this->chunk_processing($args, $chunk_data))
+		if (!$this->chunk_processing())
 			return $this->json([$Err::ECST_CHUNKPROC_FAIL]);
 
-		// merge chunks on finish
-		if ($max_chunk === $index) {
-			if (0 !== $retval = $this->finalize($args, $chunk_data))
-				return $this->json([$retval]);
-		}
+		// merge chunks on finish and do post-processing
+		if ($max_chunk == $index && 0 !== $check = $this->finalize())
+			return $this->json([$check]);
 
 		// success
-		$logger->info(
+		self::$logger->info(
 			"Chupload: file successfully uploaded: '$basename'.");
 		return $this->json([0, [
 			'path' => $basename,
 			'index'  => $index,
 		]]);
+	}
+
+	/* getters */
+
+	/**
+	 * Retrieve zapcore args.
+	 */
+	public function get_args() {
+		if (!$this->args)
+			throw new ChunkUploadError("Uploader not initialized.");
+		return $this->args;
+	}
+
+	/**
+	 * Retrieve request.
+	 *
+	 * @return array Dict of request data with keys:
+	 *     - `(string)name`, filename
+	 *     - `(int)size`, filesize
+	 *     - `(int)index`, chunk index
+	 *     - `(int)error`, builtin upload error code, UPLOAD_ERR_OK
+	 *       on success
+	 *     - `(string)blob`, uploaded chunk in string
+	 * @see https://archive.fo/x0nXY
+	 */
+	public function get_request() {
+		if (!$this->request)
+			throw new ChunkUploadError("Request not initialized.");
+		return $this->request;
+	}
+
+	/**
+	 * Retrieve chunk data.
+	 *
+	 * @return array Dict of chunk data with keys:
+	 *     - `(int)size`, total filesize
+	 *     - `(int)index`, chunk index
+	 *     - `(string)chunk_path`, chunk absolute path
+	 *     - `(int)max_chunk`, max chunk
+	 *     - `(string)chunk`, chunk blob as string
+	 *     - `(string)basename`, file basename
+	 *     - `(string)tempname`, file absolute tempname
+	 *     - `(string)destname`, file absolute destination
+	 */
+	public function get_chunk_data() {
+		if (!$this->chunk_data)
+			throw new ChunkUploadError("Chunk data not set.");
+		return $this->chunk_data;
 	}
 
 	/**
