@@ -21,7 +21,9 @@
 		$scope.errno = 0;
 		$scope.data = null;
 
-		document.querySelector('#upload').onchange = (event) => {
+		var uploader = document.querySelector('#upload');
+
+		uploader.onchange = (event) => {
 			$scope.errno = 0;
 			$scope.data = null;
 			ChunkUploader.uploadFiles(
@@ -32,6 +34,7 @@
 				function(ret, upl) {
 					$scope.progress = upl.progress;
 					$scope.path = encodeURI(ret.data.data.path);
+					uploader.value = '';
 				},
 				function(ret, upl) {
 					$scope.progress = -1;
@@ -44,7 +47,7 @@
 		};
 	});
 })();
-	</script>
+</script>
 <style>
 #wrap{
 	display:flex;
@@ -54,14 +57,23 @@
 	font-family:monospace;
 }
 #box{
-	height:8em;
-	padding:8px;
-	border:1px solid rgba(0,0,0,.3);
+	height:16em;
+	padding:8px 16px;
+	border:1px solid rgba(0,0,0,.2);
+	width: 400px;
+}
+hr{
+	height:0;
+	border:0;
+	border-bottom:3px solid rgba(0,0,0,.1);
 }
 </style>
 <!-- neck -->
 <div ng-app=chup id=wrap ng-controller=top>
 	<div id=box>
+		<p>max filesize: <?php echo MAX_FILESIZE ?></p>
+		<p>chunk size: <?php echo CHUNK_SIZE ?></p>
+		<hr>
 		<input type=file id=upload>
 		<hr>
 		<p ng-show='progress==-1&&path&&!errno'>
@@ -70,10 +82,10 @@
 		<p ng-show="progress>-1&&!errno">
 			progress: {{progress}}
 		</p>
-		<p ng-show="errno!==0">
-			http: {{http}}<br>
-			error: {{errno}}, {{data}}
-		</p>
+		<div ng-show="errno!==0">
+			<p>http: {{http}}</p>
+			<p>error: {{errno}}, {{data}}</p>
+		</div>
 	</div>
 </div>
 </html>
