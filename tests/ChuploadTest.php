@@ -16,15 +16,17 @@ use BFITech\ZapChupload\ChunkUploadError;
  */
 class ChunkUploadPatched extends ChunkUpload {
 
-	public static function get_fingerprint($chunk) {
+	public static function get_fingerprint(string $chunk) {
 		return hash_hmac('sha512', $chunk, 'sekrit');
 	}
 
-	public function make_fingerprint($chunk) {
+	public function make_fingerprint(string $chunk) {
 		return self::get_fingerprint($chunk);
 	}
 
-	public function check_fingerprint($fingerprint, $chunk_recv) {
+	public function check_fingerprint(
+		string $fingerprint, string $chunk_recv
+	) {
 		return hash_equals($fingerprint,
 			$this->make_fingerprint($chunk_recv));
 	}
@@ -36,7 +38,7 @@ class ChunkUploadPatched extends ChunkUpload {
  */
 class ChunkUploadPostProc extends ChunkUploadPatched {
 
-	public function post_processing($path) {
+	public function post_processing(string $path) {
 		return false;
 	}
 

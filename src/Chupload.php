@@ -13,9 +13,9 @@ use BFITech\ZapCore\Logger;
  * This will suppress all the PMD warnings in
  * this class.
  *
- * @manonly
+ * @cond
  * @SuppressWarnings(PHPMD.ExcessiveClassComplexity)
- * @endmanonly
+ * @endcond
  */
 class ChunkUpload {
 
@@ -51,21 +51,19 @@ class ChunkUpload {
 	 *     If left as null, default logger is used, implying
 	 *     error level and usage of STDERR.
 	 *
-	 * @manonly
+	 * @cond
 	 * @SuppressWarnings(PHPMD.CyclomaticComplexity)
 	 * @SuppressWarnings(PHPMD.NPathComplexity)
-	 * @endmanonly
+	 * @endcond
 	 */
 	public function __construct(
-		Router $core, $tempdir, $destdir,
-		$post_prefix=null, $chunk_size=null, $max_filesize=null,
-		$with_fingerprint=false, Logger $logger=null
+		Router $core, string $tempdir, string $destdir,
+		string $post_prefix=null, int $chunk_size=null,
+		int $max_filesize=null, bool $with_fingerprint=false,
+		Logger $logger=null
 	) {
 		self::$core = $core;
-
-		if (!$logger)
-			$logger = new Logger();
-		self::$logger = $logger;
+		self::$logger = $logger = $logger ?? new Logger;
 
 		// defaults
 		$this->post_prefix = '__chupload_';
@@ -148,12 +146,12 @@ class ChunkUpload {
 	 *     Unmatched fingerprint will halt remaining chunk uploads.
 	 * @codeCoverageIgnore
 	 *
-	 * @manonly
+	 * @cond
 	 * @SuppressWarnings(PHPMD.UnusedFormalParameter)
-	 * @endmanonly
+	 * @endcond
 	 */
 	protected function check_fingerprint(
-		$fingerprint, $chunk_received
+		string $fingerprint, string $chunk_received
 	) {
 		return true;
 	}
@@ -163,7 +161,7 @@ class ChunkUpload {
 	 *
 	 * @param string $path Path to a file.
 	 */
-	protected function get_basename($path) {
+	protected function get_basename(string $path) {
 		return basename($path);
 	}
 
@@ -178,11 +176,11 @@ class ChunkUpload {
 	 * @param string $path Path to destination path.
 	 * @return bool Indicates result of post-processing.
 	 *
-	 * @if 0
+	 * @cond
 	 * @SuppressWarnings(PHPMD.UnusedFormalParameter)
-	 * @endif
+	 * @endcond
 	 */
-	protected function post_processing($path) {
+	protected function post_processing(string $path) {
 		return true;
 	}
 
@@ -194,7 +192,7 @@ class ChunkUpload {
 	 *
 	 * @param array $resp Array with values: 0 := `errno`, 1 := `data`.
 	 */
-	public static function json($resp) {
+	public static function json(array $resp) {
 		$Err = new ChunkUploadError;
 		$errno = $resp[0];
 		$data = isset($resp[1]) ? $resp[1] : [];
@@ -219,7 +217,7 @@ class ChunkUpload {
 	 *
 	 * @codeCoverageIgnore
 	 */
-	private function unlink($file) {
+	private function unlink(string $file) {
 		if (@unlink($file))
 			return true;
 		self::$logger->error(
@@ -230,7 +228,7 @@ class ChunkUpload {
 	/**
 	 * Verify request.
 	 */
-	private function upload_check_request($args) {
+	private function upload_check_request(array $args) {
 		$Err = new ChunkUploadError;
 		$logger = self::$logger;
 
@@ -273,12 +271,10 @@ class ChunkUpload {
 	/**
 	 * Verifiy new chunk.
 	 *
-	 * @manonly
 	 * @SuppressWarnings(PHPMD.CyclomaticComplexity)
 	 * @SuppressWarnings(PHPMD.NPathComplexity)
-	 * @endmanonly
 	 */
-	private function upload_check_constraints($request) {
+	private function upload_check_constraints(array $request) {
 		$Err = new ChunkUploadError;
 		$logger = self::$logger;
 
@@ -348,7 +344,7 @@ class ChunkUpload {
 	/**
 	 * Append new chunk to packed chunks.
 	 */
-	private function upload_pack_chunk($constraints) {
+	private function upload_pack_chunk(array $constraints) {
 		$Err = new ChunkUploadError;
 
 		$index = $chunk = $chunk_path = null;
@@ -379,7 +375,7 @@ class ChunkUpload {
 	 * Merge packed chunks to destination.
 	 */
 	private function upload_merge_chunks(
-		$tempname, $destname, $max_chunk
+		string $tempname, string $destname, int $max_chunk
 	) {
 		$Err = new ChunkUploadError;
 		if (
@@ -426,11 +422,11 @@ class ChunkUpload {
 	 *
 	 * @param dict $args ZapCore router arguments.
 	 *
-	 * @manonly
+	 * @cond
 	 * @SuppressWarnings(PHPMD.CyclomaticComplexity)
-	 * @endmanonly
+	 * @endcond
 	 */
-	public function upload($args) {
+	public function upload(array $args) {
 		$Err = new ChunkUploadError;
 		$logger = self::$logger;
 
