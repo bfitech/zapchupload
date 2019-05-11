@@ -9,14 +9,31 @@ use BFITech\ZapCore\Logger;
 
 
 /**
- * Chupload class.
+ * ChunkUpload class.
  *
- * This will suppress all the PMD warnings in
- * this class.
+ * Example:
+ * @code
+ * <?php
+ *
+ * use BFITech\ZapCore\Router;
+ * use BFITech\ZapCore\Logger;
+ * use BFITech\ZapChupload\ChunkUpload;
+ *
+ * $logger = new Logger;
+ * $core = (new Router)->config('logger', $logger);
+ * $chup = new ChunkUpload(
+ *     $core, '/tmp/tempdir', '/tmp/destdir',
+ *     null, null, null, $logger);
+ * $core->route('/upload', [$chup, 'upload'], 'POST']);
+ * @endcode
+ *
+ * @see https://git.io/fjCho for sample client implementation using
+ *     AngularJS.
  *
  * @cond
  * @SuppressWarnings(PHPMD.ExcessiveClassComplexity)
  * @endcond
+ *
  */
 class ChunkUpload {
 
@@ -52,7 +69,7 @@ class ChunkUpload {
 	 * @param int $max_filesize Maximum filesize, defaults to 10M.
 	 *     Not affected by `upload_max_filesize`.
 	 * @param Logger $logger An instance of logging service.
-	 *     If null, default logger with error log evel and STDERR
+	 *     If null, default logger with error log level and STDERR
 	 *     are used.
 	 */
 	public function __construct(
@@ -134,16 +151,19 @@ class ChunkUpload {
 	/**
 	 * Default basename generator.
 	 *
-	 * Override this if you want to rename uploaded file according to
-	 * certain rule. This should only determine the basename, not the
-	 * entire absolute path.
+	 * Basename sent by POST data under the key 'name' is used by
+	 * default. Override this if you want to rename uploaded file
+	 * according to certain rule.
+	 *
+	 * @return string File basename.
+	 * @see ChunkUpload::get_request.
 	 */
 	protected function get_basename() {
 		return basename($this->get_request()['name']);
 	}
 
 	/**
-	 * Pre-processing stub.
+	 * Pre-processing stub. Executes on first chunk.
 	 *
 	 * Override this for pre-processing checks, e.g. when you want
 	 * to determine whether upload must proceed after certain
@@ -156,7 +176,7 @@ class ChunkUpload {
 	}
 
 	/**
-	 * Chunk processing hook.
+	 * Chunk processing. Executes on every chunk.
 	 *
 	 * Use this for chunk-specific processing, e.g. fingerprinting.
 	 *
@@ -167,13 +187,14 @@ class ChunkUpload {
 	}
 
 	/**
-	 * Post-processing stub.
+	 * Post-processing stub. Executes on last chunk.
 	 *
 	 * Override this for fast post-processing such as pulling and/or
 	 * stripping EXIF tags. For longer processing, use destdir
 	 * and process from there to avoid script timeout, while keeping
 	 * return of this method always true. Also useful if you want to
-	 * integrate Chupload as a part of generic zapcore routing handler.
+	 * integrate ChunkUpload as a part of generic zapcore routing
+	 * handler.
 	 *
 	 * @return bool True on success.
 	 *
@@ -185,9 +206,9 @@ class ChunkUpload {
 	/**
 	 * Wrap JSON response.
 	 *
-	 * This is different from typical core JSON since it's related to
-	 * upload end status. I/O or upload error will emit HTTP status
-	 * 503.
+	 * This is different from typical zapcore JSON response since it's
+	 * related to upload end status. I/O or upload error will emit HTTP
+	 * status 503.
 	 */
 	private function json(array $resp) {
 		$Err = new ChunkUploadError;
@@ -212,7 +233,7 @@ class ChunkUpload {
 	 *
 	 * Override this if you want to stop uploader from printing
 	 * out JSON response and halt. Useful when you're integrating
-	 * Chupload with other router. Parameters are ready to pass to
+	 * ChunkUpload with other router. Parameters are ready to pass to
 	 * Router::print_json().
 	 *
 	 * @param int $errno Response error number.
@@ -246,7 +267,7 @@ class ChunkUpload {
 	/**
 	 * Verify request.
 	 *
-	 * On success, this sets Chupload::request.
+	 * On success, this sets ChunkUpload::request.
 	 *
 	 * @return int $errno 0 on success, certain number from class
 	 *     constants on error.
@@ -294,7 +315,7 @@ class ChunkUpload {
 	/**
 	 * Verifiy new chunk out of Chupload::request.
 	 *
-	 * On success, this sets Chupload::chunk_data.
+	 * On success, this sets ChunkUpload::chunk_data.
 	 *
 	 * @return int $errno 0 on success, certain number from class
 	 *     constants on error.
@@ -456,6 +477,9 @@ class ChunkUpload {
 
 	/**
 	 * Finalize merging and execute post-processor.
+	 *
+	 * @return int $errno 0 on success, certain number from class
+	 *     constants on error.
 	 */
 	private function finalize() {
 		$log = self::$logger;
@@ -482,7 +506,7 @@ class ChunkUpload {
 	/**
 	 * Uploader.
 	 *
-	 * @param dict $args ZapCore router arguments.
+	 * @param dict $args Router arguments.
 	 */
 	public function upload(array $args) {
 		$Err = new ChunkUploadError;
@@ -529,7 +553,10 @@ class ChunkUpload {
 	/* getters */
 
 	/**
-	 * Retrieve zapcore args.
+	 * Retrieve router args.
+	 *
+	 * @return array Dict of standard arguments accepted by
+	 *     Router::route callback.
 	 */
 	public function get_args() {
 		if (!$this->args)

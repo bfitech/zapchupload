@@ -1,0 +1,139 @@
+<?xml version="1.0"?>
+<ruleset name="BFITech">
+	<description>BFITech PHP Coding Convention.</description>
+
+	<!-- exceptions -->
+	<rule>
+		<!-- no camel case for method names -->
+		<exclude ref="Generic.NamingConventions.CamelCapsFunctionName"/>
+		<!-- allow multiple assignments, useful before extract() -->
+		<exclude ref="Generic.Formatting.MultipleStatementAlignment"/>
+	</rule>
+
+	<!-- tabs for indentation -->
+	<arg name="tab-width" value="4"/>
+	<rule ref="Generic.WhiteSpace.DisallowSpaceIndent"/>
+	<rule ref="Generic.WhiteSpace.ScopeIndent">
+		<properties>
+			<property name="indent" value="4"/>
+			<property name="tabIndent" value="true"/>
+			<property name="ignoreIndentationTokens" type="array"
+				value="T_HEREDOC,T_NOWDOC,T_INLINE_HTML"/>
+		</properties>
+	</rule>
+
+	<!-- always start file with <?php -->
+	<rule ref="Generic.PHP.DisallowShortOpenTag"/>
+	<rule ref="Generic.PHP.DisallowAlternativePHPTags"/>
+
+	<!-- never end file with ?> -->
+	<rule ref="PSR2.Files.ClosingTag"/>
+
+	<!-- constants are all-caps -->
+	<rule ref="Generic.NamingConventions.UpperCaseConstantName"/>
+
+	<!-- no BOM -->
+	<rule ref="Generic.Files.ByteOrderMark"/>
+
+	<!-- no `else if`, always `elseif` -->
+	<rule ref="PSR2.ControlStructures.ElseIfDeclaration"/>
+
+	<!-- must use K&R braces, including on classes -->
+	<rule ref="Generic.Functions.OpeningFunctionBraceKernighanRitchie" />
+	<rule ref="Generic.Classes.OpeningBraceSameLine"/>
+
+	<!-- line width -->
+	<rule ref="Generic.Files.LineLength">
+		<properties>
+			<!-- never exceed 72 char -->
+			<property name="lineLimit" value="72"/>
+			<property name="absoluteLineLimit" value="72"/>
+		</properties>
+	</rule>
+
+	<!-- default value must be at the end, python-style -->
+	<rule ref="PEAR.Functions.ValidDefaultValue.NotAtEnd"/>
+
+	<!-- do not accept \r\n or \r for EOL -->
+	<rule ref="Generic.Files.LineEndings">
+		<properties>
+			<property name="eolChar" value="\n"/>
+		</properties>
+	</rule>
+
+	<!-- end file with EOL; won't be visible on most editors
+		 as it's treated as terminator instead of separator -->
+	<rule ref="PSR2.Files.EndFileNewline"/>
+
+	<!-- language keywords must be in lowercase -->
+	<rule ref="Generic.PHP.LowerCaseKeyword"/>
+	<rule ref="Generic.PHP.LowerCaseConstant"/>
+
+	<!-- no padding to make '=' appears inlined, PEP8-style -->
+	<rule ref="Generic.Formatting.MultipleStatementAlignment">
+		<properties>
+			<property name="maxPadding" value="1"/>
+			<property name="ignoreMultiLine" value="true"/>
+			<property name="error" value="true"/>
+		</properties>
+	</rule>
+
+	<!-- always 1 space after function -->
+	<rule ref="Squiz.WhiteSpace.FunctionSpacing">
+		<properties>
+			<property name="spacing" value="1" />
+		</properties>
+	</rule>
+	<!-- always 1 space around logical operators -->
+	<rule ref="Squiz.WhiteSpace.LogicalOperatorSpacing"/>
+	<!-- always 1 space before ';' -->
+	<rule ref="Squiz.WhiteSpace.SemicolonSpacing"/>
+	<!-- no space after cast -->
+	<rule ref="Generic.Formatting.NoSpaceAfterCast"/>
+
+	<!-- no trailing white space -->
+	<rule ref="Squiz.WhiteSpace.SuperfluousWhitespace"/>
+
+	<!-- no spaces around '=' at function declarations -->
+	<rule ref="Squiz.Functions.FunctionDeclarationArgumentSpacing">
+		<properties>
+			<property name="equalsSpacing" value="0" />
+		</properties>
+	</rule>
+
+	<!-- nesting -->
+	<rule ref="Generic.Metrics.NestingLevel">
+		<properties>
+			<property name="nestingLevel" value="4"/>
+			<property name="absoluteNestingLevel" value="5"/>
+		</properties>
+	</rule>
+
+	<!-- phpmd-like -->
+	<rule ref="Squiz.Classes.DuplicateProperty.Found"/>
+	<rule ref="Squiz.Classes.SelfMemberReference.IncorrectCase"/>
+	<rule ref="Squiz.Classes.SelfMemberReference.NotUsed"/>
+	<rule ref="Squiz.Classes.SelfMemberReference.SpaceBefore"/>
+	<rule ref="Squiz.Classes.SelfMemberReference.SpaceAfter"/>
+	<rule ref="Squiz.ControlStructures.ForEachLoopDeclaration"/>
+	<rule ref="Squiz.ControlStructures.ForLoopDeclaration"/>
+	<rule ref="Squiz.ControlStructures.LowercaseDeclaration"/>
+	<rule ref="Squiz.Functions.FunctionDuplicateArgument.Found"/>
+	<rule ref="Squiz.PHP.CommentedOutCode.Found"/>
+	<rule ref="Squiz.PHP.NonExecutableCode.Unreachable"/>
+	<rule ref="Squiz.PHP.NonExecutableCode.ReturnNotRequired"/>
+	<rule ref="Squiz.Scope.MemberVarScope.Missing"/>
+	<rule ref="Squiz.Scope.StaticThisUsage.Found"/>
+	<rule ref="Squiz.WhiteSpace.ScopeClosingBrace"/>
+
+	<!-- warn todos, don't err out -->
+	<rule ref="Generic.Commenting.Todo.CommentFound">
+		<message>TODO: "%s"</message>
+		<type>warning</type>
+	</rule>
+	<rule ref="Generic.Commenting.Fixme.TaskFound">
+		<message>FIXME: "%s"</message>
+		<type>warning</type>
+	</rule>
+
+</ruleset>
