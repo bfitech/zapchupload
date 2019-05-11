@@ -412,7 +412,7 @@ class ChunkUpload {
 		if (false === $fhn) {
 			// @codeCoverageIgnoreStart
 			self::$logger->error(
-				"Chupload: cannot open temp file: '%s'.", $tempname);
+				"Chupload: cannot open temp file: '$tempname'.");
 			return $Err::EDIO;
 			// @codeCoverageIgnoreEnd
 		}
