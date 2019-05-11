@@ -11,7 +11,7 @@ use BFITech\ZapChupload\ChunkUploadError as Err;
 
 
 /**
- * Patched class where post-processing always fails.
+ * Pre-processing and chunk processing test.
  */
 class ChunkUploadChunkProc extends ChunkUpload {
 
@@ -34,6 +34,9 @@ class ChunkUploadChunkProc extends ChunkUpload {
 
 }
 
+/**
+ * Interceptor test.
+ */
 class ChunkUploadIntercept extends ChunkUploadChunkProc {
 
 	public function intercept_response(
@@ -44,6 +47,9 @@ class ChunkUploadIntercept extends ChunkUploadChunkProc {
 	}
 }
 
+/**
+ * Post-processing test.
+ */
 class ChunkUploadPostProc extends ChunkUpload {
 
 	protected function post_processing() {
