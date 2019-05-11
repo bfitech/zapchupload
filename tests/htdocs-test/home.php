@@ -15,33 +15,35 @@
 		'chupload',
 	]).controller('top', function($scope, ChunkUploader){
 
-		$scope.progress = -1;
-		$scope.path = null;
+		var s = $scope;
 
-		$scope.errno = 0;
-		$scope.data = null;
+		s.progress = -1;
+		s.path = null;
+
+		s.errno = 0;
+		s.data = null;
 
 		var uploader = document.querySelector('#upload');
 
 		uploader.onchange = (event) => {
-			$scope.errno = 0;
-			$scope.data = null;
+			s.errno = 0;
+			s.data = null;
 			ChunkUploader.uploadFiles(
-				event, '/upload', {}, 1024 * 10,
+				event, '/upload', {}, <?php echo $chunk_size ?>,
 				function(ret, upl) {
-					$scope.progress = upl.progress;
+					s.progress = upl.progress;
 				},
 				function(ret, upl) {
-					$scope.progress = upl.progress;
-					$scope.path = encodeURI(ret.data.data.path);
+					s.progress = upl.progress;
+					s.path = encodeURI(ret.data.data.path);
 					uploader.value = '';
 				},
 				function(ret, upl) {
-					$scope.progress = -1;
-					$scope.path = null;
-					$scope.http = ret.status;
-					$scope.errno = ret.data.errno;
-					$scope.data = JSON.stringify(ret.data.data);
+					s.progress = -1;
+					s.path = null;
+					s.http = ret.status;
+					s.errno = ret.data.errno;
+					s.data = JSON.stringify(ret.data.data);
 				}
 			);
 		};
@@ -61,6 +63,7 @@
 	padding:8px 16px;
 	border:1px solid rgba(0,0,0,.2);
 	width: 400px;
+	overflow:auto;
 }
 hr{
 	height:0;
@@ -71,8 +74,8 @@ hr{
 <!-- neck -->
 <div ng-app=chup id=wrap ng-controller=top>
 	<div id=box>
-		<p>max filesize: <?php echo MAX_FILESIZE ?></p>
-		<p>chunk size: <?php echo CHUNK_SIZE ?></p>
+		<p>max filesize: <?php echo $max_filesize ?></p>
+		<p>chunk size: <?php echo $chunk_size ?></p>
 		<hr>
 		<input type=file id=upload>
 		<hr>
