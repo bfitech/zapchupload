@@ -19,6 +19,7 @@
 
 		s.progress = -1;
 		s.path = null;
+		s.pathComp = '';
 
 		s.errno = 0;
 		s.data = null;
@@ -35,12 +36,14 @@
 				},
 				function(ret, upl) {
 					s.progress = upl.progress;
-					s.path = encodeURI(ret.data.data.path);
+					s.path = ret.data.data.path;
+					s.pathComp = encodeURIComponent(ret.data.data.path);
 					uploader.value = '';
 				},
 				function(ret, upl) {
 					s.progress = -1;
 					s.path = null;
+					s.pathComp = '';
 					s.http = ret.status;
 					s.errno = ret.data.errno;
 					s.data = JSON.stringify(ret.data.data);
@@ -80,7 +83,8 @@ hr{
 		<input type=file id=upload>
 		<hr>
 		<p ng-show='progress==-1&&path&&!errno'>
-			file: <a href='./?file={{path}}' target=_blank>{{path}}</a>
+			file: <a href='./?file={{pathComp}}'
+				target=_blank>{{path}}</a>
 		</p>
 		<p ng-show="progress>-1&&!errno">
 			progress: {{progress}}

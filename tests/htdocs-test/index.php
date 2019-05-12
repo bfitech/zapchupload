@@ -11,8 +11,8 @@ use BFITech\ZapChupload\ChunkUpload;
 
 
 define('TOPDIR', __DIR__ . '/uploads');
-define('CHUNK_SIZE', 1024 * 10);
-define('MAX_FILESIZE', 1024 * 500);
+define('CHUNK_SIZE', 1024 * 300);
+define('MAX_FILESIZE', 1024 * 1024 * 500);
 
 
 class ChunkRegular extends ChunkUpload {
@@ -23,13 +23,11 @@ class ChunkRegular extends ChunkUpload {
 		$get = $args['get'];
 		if (empty($get)) {
 			$core::start_header(200, 3600);
-			return (new Template())->load(__DIR__ . '/home.php', [
-				'chunk_size' => $this->get_chunk_size(),
-				'max_filesize' => $this->get_max_filesize(),
-			]);
+			return (new Template())->load(__DIR__ . '/home.php',
+				$this->get_config());
 		}
 
-		$file = isset($get['file']) ?? $get['file'];
+		$file = $get['file'] ?? null;
 		if ($file)
 			$core->static_file(TOPDIR . '/data/' . $file);
 

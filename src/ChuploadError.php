@@ -12,6 +12,30 @@ namespace BFITech\ZapChupload;
  */
 class ChunkUploadError extends \Exception {
 
+	/* initialization errors */
+
+	/** Invalid class constant overrides. */
+	const EINI_CONST_INVALID = 0x0100;
+	/** Invalid _POST data prefix. */
+	const EINI_PREFIX_INVALID = 0x0101;
+	/** Chunk size too small. */
+	const EINI_CHUNK_TOO_SMALL = 0x0102;
+	/** Chunk size too big. */
+	const EINI_CHUNK_TOO_BIG = 0x0103;
+	/** Chunk size too big. */
+	const EINI_MAX_FILESIZE_TOO_SMALL = 0x0104;
+	/** Temporary or destination directory not set. */
+	const EINI_DIRS_NOT_SET = 0x0105;
+	/** Temporary and destination directory are identical. */
+	const EINI_DIRS_IDENTICAL = 0x0106;
+	/** Temporary or destination can't be created. */
+	const EINI_DIRS_NOT_CREATED = 0x0107;
+	/**
+	 * Cannot retrieve request-related properties without
+	 * invoking ChunkUpload::upload().
+	 */
+	const EINI_PROPERTY_EMPTY = 0x0108;
+
 	/* request errors */
 
 	/** No chunk received. */
@@ -42,13 +66,37 @@ class ChunkUploadError extends \Exception {
 	/** Post-proc failed. */
 	const ECST_POSTPROC_FAIL = 0x0310;
 
-	/* upload error */
+	/* upload errors */
 
 	/* Upload errors are identical to builtin UPLOAD_ERR_*. */
 
-	/* I/O error */
+	/* I/O errors */
 
-	/** Disk I/O error. */
-	const EDIO = 0x0500;
+	/** Cannot delete file. */
+	const EDIO_DELETE_FAIL = 0x0500;
+	/** Cannot merge packed chunks. */
+	const EDIO_MERGE_FAIL = 0x0501;
+	/** Cannot write to file. */
+	const EDIO_WRITE_FAIL = 0x0502;
+	/** Resource busy. */
+	const EDIO_BUSY = 0x0503;
+
+	/** Errno. */
+	public $code = 0;
+	/** Errmsg. */
+	public $message = null;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param int $code Errno. See the class constants.
+	 * @param string $message Errmsg.
+	 */
+	public function __construct(int $code=null, string $message=null) {
+		if ($code)
+			$this->code = $code;
+		if ($message)
+			$this->message = $message;
+	}
 
 }

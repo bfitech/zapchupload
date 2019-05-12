@@ -11,6 +11,17 @@ use BFITech\ZapChupload\ChunkUploadError as Err;
 
 
 /**
+ * Class constant overrides.
+ */
+class ChunkUploadConst extends ChunkUpload {
+
+	const CHUNK_SIZE_MIN = 100;
+	const CHUNK_SIZE_DEFAULT = 100;
+	const CHUNK_SIZE_MAX = 100;
+
+}
+
+/**
  * Pre-processing and chunk processing test.
  */
 class ChunkUploadChunkProc extends ChunkUpload {
@@ -78,70 +89,115 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		$core = (new RouterDev)->config('logger', $logger);
 		$tdir = self::$tdir;
 
+		$tempdir = $tdir . "/xtemp";
+		$destdir = $tdir . "/xdest";
+
+		# constant overrides invalid
+		try {
+			new ChunkUploadConst(
+				$core, $tempdir, $destdir,
+				null, null, null, $logger);
+		} catch(Err $err) {
+			$this->ae($err->code, Err::EINI_CONST_INVALID);
+		}
+
+		# chunk too small
 		$csz_too_small = pow(2, 8);
-		$csz_too_yuuge = pow(2, 24);
-
-		$chup = new ChunkUpload(
-			$core, $tdir . '/xtemp', $tdir . '/xdest',
-			'_some_pfx', $csz_too_small, MAX_FILESIZE,
-			$logger
+		try {
+			new ChunkUpload(
+				$core, $tempdir, $destdir,
+				'_some_pfx', $csz_too_small, MAX_FILESIZE, $logger
 		);
-		$this->ae($chup->get_chunk_size(), 1024 * 100);
-		try {
-			$chup->get_args();
-		} catch(Err $e) {
-		}
-		try {
-			$chup->get_request();
-		} catch(Err $e) {
-		}
-		try {
-			$chup->get_chunk_data();
-		} catch(Err $e) {
+		} catch(Err $err) {
+			$this->ae($err->code, Err::EINI_CHUNK_TOO_SMALL);
 		}
 
-		$chup = new ChunkUpload(
-			$core, $tdir . '/xtemp', $tdir . '/xdest',
-			'_some_pfx', $csz_too_yuuge, MAX_FILESIZE, $logger
-		);
-		$this->ae($chup->get_chunk_size(), 1024 * 100);
-
-		$chup = new ChunkUpload(
-			$core, $tdir . '/xtemp', $tdir . '/xdest',
-			'_some_pfx', CHUNK_SIZE, MAX_FILESIZE, $logger
-		);
-		$this->ae($chup->get_chunk_size(), CHUNK_SIZE);
-		$this->ae($chup->get_post_prefix(), '_some_pfx');
-		$this->ae($chup->get_max_filesize(), MAX_FILESIZE);
-
-		$chup = new ChunkUpload(
-			$core, $tdir . '/xtemp', $tdir . '/xdest',
-			'_some_pfx', CHUNK_SIZE, CHUNK_SIZE - 1, $logger
-		);
-
+		# chunk too big
 		try {
-			$chup = new ChunkUpload(
+			$csz_too_yuuge = pow(2, 32);
+			new ChunkUpload(
+				$core, $tempdir, $destdir,
+				'_some_pfx', $csz_too_yuuge, MAX_FILESIZE, $logger
+			);
+		} catch(Err $err) {
+			$this->ae($err->code, Err::EINI_CHUNK_TOO_BIG);
+		}
+
+		# max size too big
+		try {
+			new ChunkUpload(
+				$core, $tempdir, $destdir,
+				'_some_pfx', CHUNK_SIZE, CHUNK_SIZE - 1, $logger
+			);
+		} catch(Err $err) {
+			$this->ae($err->code, Err::EINI_MAX_FILESIZE_TOO_SMALL);
+		}
+
+		# empty dirs
+		try {
+			new ChunkUpload(
 				$core, '', '',
 				'_some_pfx', CHUNK_SIZE, MAX_FILESIZE, $logger
 			);
-		} catch(Err $e) {
+		} catch(Err $err) {
+			$this->ae($err->code, Err::EINI_DIRS_NOT_SET);
 		}
 
+		# dirs identical
 		try {
 			$chup = new ChunkUpload(
-				$core, 'x', 'x',
+				$core, '/dev/null', '/dev/null',
 				'_some_pfx', CHUNK_SIZE, MAX_FILESIZE, $logger
 			);
-		} catch(Err $e) {
+		} catch(Err $err) {
+			$this->ae($err->code, Err::EINI_DIRS_IDENTICAL);
 		}
 
+		# dirs identical
 		try {
 			$chup = new ChunkUpload(
-				$core, '/var/chupload/xtemp', '/var/chupload/xdest',
+				$core, $tempdir, __FILE__,
 				'_some_pfx', CHUNK_SIZE, MAX_FILESIZE, $logger
 			);
-		} catch(Err $e) {
+		} catch(Err $err) {
+			$this->ae($err->code, Err::EINI_DIRS_NOT_CREATED);
 		}
+
+		# prefix invalid
+		try {
+			$chup = new ChunkUpload(
+				$core, $tempdir, $destdir,
+				'1', CHUNK_SIZE, MAX_FILESIZE, $logger
+			);
+		} catch(Err $err) {
+			$this->ae($err->code, Err::EINI_PREFIX_INVALID);
+		}
+
+		# ok
+		$chup = new ChunkUpload(
+			$core, $tempdir, $destdir,
+			null, CHUNK_SIZE, MAX_FILESIZE, $logger
+		);
+		$config = $chup->get_config();
+		$this->ae($config['chunk_size'], CHUNK_SIZE);
+		$this->ae($config['post_prefix'], '__chupload_');
+		## cannot get request-related props without routing
+		try {
+			$chup->get_args();
+		} catch(Err $err) {
+			$this->ae($err->code, Err::EINI_PROPERTY_EMPTY);
+		}
+		try {
+			$chup->get_request();
+		} catch(Err $err) {
+			$this->ae($err->code, Err::EINI_PROPERTY_EMPTY);
+		}
+		try {
+			$chup->get_chunk_data();
+		} catch(Err $err) {
+			$this->ae($err->code, Err::EINI_PROPERTY_EMPTY);
+		}
+
 	}
 
 	/**

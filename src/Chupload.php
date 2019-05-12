@@ -33,19 +33,44 @@ use BFITech\ZapCore\Logger;
  * @cond
  * @SuppressWarnings(PHPMD.ExcessiveClassComplexity)
  * @endcond
- *
  */
 class ChunkUpload {
+
+	/**
+	 * Default chunk size.
+	 *
+	 * On overriding, exception will be thrown if this condition are 
+	 * not met:<br>
+	 * > ChunkUpload::CHUNK_SIZE_MIN <
+	 * > ChunkUpload::CHUNK_SIZE_DEFAULT <
+	 * > ChunkUpload::CHUNK_SIZE_MAX
+	 */
+	const CHUNK_SIZE_DEFAULT = 1024 * 100;
+	/**
+	 * Minimum chunk size.
+	 *
+	 * If this is too small, network overhead will slow down the
+	 * upload tremendously.
+	 **/
+	const CHUNK_SIZE_MIN = 1024 * 10;
+	/**
+	 * Maximum chunk size.
+	 *
+	 * If this is too big, it will defeat the purpose of chunk 
+	 * uploading and most likely will hit `upload_max_size` on typical
+	 * PHP setup.
+	 **/
+	const CHUNK_SIZE_MAX = 1024 * 1024 * 20;
 
 	/** Router instance. */
 	public static $core = null;
 	/** Logger instance. */
 	public static $logger = null;
 
-	// make sure these are the same with client
+	// Use ChunkUpload::get_config to retrieve values of these.
 	private $post_prefix = '__chupload_';
-	private $chunk_size = 1024 * 100;
-	private $max_filesize = 1024 * 1024 * 10;
+	private $chunk_size = self::CHUNK_SIZE_DEFAULT;
+	private $max_filesize = self::CHUNK_SIZE_MAX;
 
 	private $tempdir = null;
 	private $destdir = null;
@@ -59,7 +84,8 @@ class ChunkUpload {
 	/**
 	 * Constructor.
 	 *
-	 * @param Router $core Router instance.
+	 * @param Router $core Router instance. Use
+	 *     BFITech\\ZapCoreDev\\RouterDev instance for testing.
 	 * @param string $tempdir Temporary upload directory.
 	 * @param string $destdir Destination directory.
 	 * @param string $post_prefix POST data prefix. Defaults to
@@ -78,59 +104,111 @@ class ChunkUpload {
 		int $max_filesize=null, Logger $logger=null
 	) {
 		self::$core = $core;
-		self::$logger = $logger = $logger ?? new Logger;
+		self::$logger = $logger ?? new Logger;
 
-		if ($post_prefix)
-			$this->post_prefix = $post_prefix;
+		$this->prepare_prefix($post_prefix);
+		$this->prepare_sizes($chunk_size, $max_filesize);
+		$this->prepare_dir($tempdir, $destdir);
+	}
+
+	/**
+	 * Exception and error logger wrapper.
+	 */
+	private function throw_error(int $code, string $message) {
+		self::$logger->error("Chupload: $message");
+		throw new ChunkUploadError($code, $message);
+	}
+
+	/**
+	 * Verify _POST data prefix.
+	 */
+	private function prepare_prefix(string $post_prefix=null) {
+		$log = self::$logger;
+		if (!$post_prefix) {
+			$log->debug(sprintf(
+				"Chupload: using post prefix: '%s'.",
+				$this->post_prefix));
+			return;
+		}
+		$pattern = '/^[a-z_]([a-z0-9_\-]+)?$/i';
+		if (!preg_match($pattern, $post_prefix)) {
+			$this->throw_error(
+				ChunkUploadError::EINI_PREFIX_INVALID,
+				"Prefix must satisfy regex: '$pattern'.");
+		}
+		$log->debug(
+			"Chupload: using post prefix: '$post_prefix'.");
+		$this->post_prefix = $post_prefix;
+	}
+
+	/**
+	 * Verify chunk size and max filesize.
+	 */
+	private function prepare_sizes(
+		int $chunk_size=null, int $max_filesize=null
+	) {
+		$Err = new ChunkUploadError;
+		$log = self::$logger;
+
+		$min = static::CHUNK_SIZE_MIN;
+		$def = static::CHUNK_SIZE_DEFAULT;
+		$max = static::CHUNK_SIZE_MAX;
+
+		if (!($min < $def && $def < $max))
+			$this->throw_error($Err::EINI_CONST_INVALID,
+				"Invalid chunk parameter overrides.");
 
 		if ($chunk_size) {
-			if ($chunk_size > $this->chunk_size) {
-				$logger->warning(
-					"Chupload: chunk size > 2M. Default 100k is used.");
-			} elseif ($chunk_size < 1024) {
-				$logger->warning(
-					"Chupload: chunk size < 1k. Default 100k is used.");
-			} else {
-				$logger->debug(
-					"Chupload: using chunk size: $chunk_size.");
-				$this->chunk_size = $chunk_size;
+			if ($chunk_size < $min) {
+				$msg = sprintf(
+					"Chunk size too small: %d < %d.",
+					$chunk_size, $min);
+				$this->throw_error($Err::EINI_CHUNK_TOO_SMALL, $msg);
 			}
+			if ($chunk_size > $max) {
+				$msg = sprintf(
+					"Chunk size too big: %d > %d.",
+					$chunk_size, $max);
+				$this->throw_error($Err::EINI_CHUNK_TOO_BIG, $msg);
+			}
+			$log->debug(
+				"Chupload: using chunk size: $chunk_size.");
+			$this->chunk_size = $chunk_size;
 		}
 
 		if ($max_filesize) {
 			if ($max_filesize < $this->chunk_size) {
-				$logger->warning(
-					"Chupload: max filesize < chunk size. ".
-					"Default 10M is used.");
-			} else {
-				$this->max_filesize = $max_filesize;
+				$msg = sprintf(
+					"Chupload max filesize too small: %d < %d. ",
+					$max_filesize, $this->chunk_size);
+				$this->throw_error(
+					$Err::EINI_MAX_FILESIZE_TOO_SMALL, $msg);
 			}
+			$log->debug(
+				"Chupload: using chunk size: $chunk_size.");
+			$this->max_filesize = $max_filesize;
 		}
 
-		$logger->debug(sprintf(
-			"Chupload: using max filesize: %s.", $this->max_filesize));
-
-		$this->prepare_dir($tempdir, $destdir);
 	}
 
 	/**
 	 * Prepare temporary and destination directories.
 	 */
-	private function prepare_dir($tempdir, $destdir) {
-		$log = self::$logger;
+	private function prepare_dir(
+		string $tempdir=null, string $destdir=null
+	) {
+		$Err = new ChunkUploadError;
 
 		if (!$tempdir || !$destdir) {
-			$errmsg = sprintf('%s not set.',
+			$msg = sprintf('%s directory not set.',
 				(!$tempdir ? 'Temporary' : 'Destination'));
-			$log->error("Chupload: $errmsg");
-			throw new ChunkUploadError($errmsg);
+			$this->throw_error($Err::EINI_DIRS_NOT_SET, $msg);
 		}
 
 		if ($tempdir == $destdir) {
-			$errmsg = "Temporary and destination dirs mustn't " .
+			$msg = "Temporary and destination dirs mustn't " .
 				"be the same.";
-			$log->error("Chupload: $errmsg");
-			throw new ChunkUploadError($errmsg);
+			$this->throw_error($Err::EINI_DIRS_IDENTICAL, $msg);
 		}
 
 		foreach ([
@@ -138,22 +216,31 @@ class ChunkUpload {
 			'destdir' => $destdir,
 		] as $dname => $dpath) {
 			if (!is_dir($dpath) && !@mkdir($dpath, 0755)) {
-				$errmsg = sprintf(
+				$msg = sprintf(
 					"Cannot create %s directory: '%s.'",
 					$dname, $dpath);
-				$log->error("Chupload: $errmsg");
-				throw new ChunkUploadError($errmsg);
+				$this->throw_error($Err::EINI_DIRS_NOT_CREATED, $msg);
 			}
 			$this->$dname = $dpath;
 		}
+
+		self::$logger->debug(sprintf(
+			"Chupload: using tempdir: '%s', destdir: '%s'.",
+			$tempdir, $destdir));
 	}
 
 	/**
 	 * Default basename generator.
 	 *
-	 * Basename sent by POST data under the key 'name' is used by
-	 * default. Override this if you want to rename uploaded file
-	 * according to certain rule.
+	 * Basename sent by `_POST` data under the key 'name' is used.
+	 * Override this if you want to rename uploaded file according to
+	 * certain rule.
+	 *
+	 * Due to its simplicity, this default implementation may
+	 * cause unordered packed chunks in the case of simultaneous
+	 * uploads of the same basename. One way to prevent
+	 * this is by using a shortlived random cookie for each request
+	 * and use ChunkUpload::post_processing to rename the file.
 	 *
 	 * @return string File basename.
 	 * @see ChunkUpload::get_request.
@@ -219,7 +306,14 @@ class ChunkUpload {
 		if ($errno !== 0) {
 			$http_code = 403;
 			// @codeCoverageIgnoreStart
-			if ($errno === $Err::EDIO || $this->upload_error)
+			if (
+				$this->upload_error ||
+				in_array($errno, [
+					$Err::EDIO_DELETE_FAIL,
+					$Err::EDIO_MERGE_FAIL,
+					$Err::EDIO_WRITE_FAIL,
+				])
+			)
 				$http_code = 503;
 			// @codeCoverageIgnoreEnd
 		}
@@ -374,7 +468,7 @@ class ChunkUpload {
 		# make sure get_basename() guarantee uniqueness
 		// @codeCoverageIgnoreStart
 		if (file_exists($destname) && !$this->unlink($destname))
-			return $Err::EDIO;
+			return $Err::EDIO_DELETE_FAIL;
 		// @codeCoverageIgnoreEnd
 
 		$this->chunk_data = [
@@ -413,7 +507,14 @@ class ChunkUpload {
 			// @codeCoverageIgnoreStart
 			self::$logger->error(
 				"Chupload: cannot open temp file: '$tempname'.");
-			return $Err::EDIO;
+			return $Err::EDIO_WRITE_FAIL;
+			// @codeCoverageIgnoreEnd
+		}
+		if (!flock($fhn, LOCK_EX | LOCK_NB)) {
+			// @codeCoverageIgnoreStart
+			self::$logger->error(
+				"Chupload: temporary file busy: '$tempname'.");
+			return $Err::EDIO_BUSY;
 			// @codeCoverageIgnoreEnd
 		}
 		# write to temp blob
@@ -447,7 +548,19 @@ class ChunkUpload {
 				"Cannot open files for merging: '%s' -> '%s'.",
 				$tempname, $destname);
 			self::$logger->error("Chupload: $errmsg");
-			return $Err::EDIO;
+			return $Err::EDIO_MERGE_FAIL;
+			// @codeCoverageIgnoreEnd
+		}
+		if (
+			!flock($fhi, LOCK_SH) ||
+			!flock($fho, LOCK_EX | LOCK_NB)
+		) {
+			// @codeCoverageIgnoreStart
+			$errmsg = sprintf(
+				"Resource busy when merging: '%s' -> '%s'.",
+				$tempname, $destname);
+			self::$logger->error("Chupload: $errmsg");
+			return $Err::EDIO_BUSY;
 			// @codeCoverageIgnoreEnd
 		}
 		if ($max_chunk === 0) {
@@ -560,7 +673,9 @@ class ChunkUpload {
 	 */
 	public function get_args() {
 		if (!$this->args)
-			throw new ChunkUploadError("Uploader not initialized.");
+			throw new ChunkUploadError(
+				ChunkUploadError::EINI_PROPERTY_EMPTY,
+				"Uploader not initialized.");
 		return $this->args;
 	}
 
@@ -578,7 +693,9 @@ class ChunkUpload {
 	 */
 	public function get_request() {
 		if (!$this->request)
-			throw new ChunkUploadError("Request not initialized.");
+			throw new ChunkUploadError(
+				ChunkUploadError::EINI_PROPERTY_EMPTY,
+				"Request not initialized.");
 		return $this->request;
 	}
 
@@ -597,29 +714,29 @@ class ChunkUpload {
 	 */
 	public function get_chunk_data() {
 		if (!$this->chunk_data)
-			throw new ChunkUploadError("Chunk data not set.");
+			throw new ChunkUploadError(
+				ChunkUploadError::EINI_PROPERTY_EMPTY,
+				"Chunk data not set.");
 		return $this->chunk_data;
 	}
 
 	/**
-	 * Retrieve private post_prefix property.
+	 * Retrieve verified properties.
+	 *
+	 * Very useful when you want to set up client parameters
+	 * programmatically.
+	 *
+	 * @return array Dict containing keys:
+	 *     - `post_prefix`, verified _POST data prefix
+	 *     - `chunk_size`, verified cunk size
+	 *     - `max_filesize`, verified max filesize
 	 */
-	public function get_post_prefix() {
-		return $this->post_prefix;
-	}
-
-	/**
-	 * Retrieve private chunk_size property.
-	 */
-	public function get_chunk_size() {
-		return $this->chunk_size;
-	}
-
-	/**
-	 * Retrieve private max_filesize property.
-	 */
-	public function get_max_filesize() {
-		return $this->max_filesize;
+	public function get_config() {
+		return [
+			'post_prefix' => $this->post_prefix,
+			'chunk_size' => $this->chunk_size,
+			'max_filesize' => $this->max_filesize,
+		];
 	}
 
 }
