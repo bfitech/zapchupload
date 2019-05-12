@@ -68,17 +68,26 @@ class ChunkUpload {
 	public static $logger = null;
 
 	// Use ChunkUpload::get_config to retrieve values of these.
+	/** Default _POST prefix. */
 	private $post_prefix = '__chupload_';
+	/** Default chunk size. */
 	private $chunk_size = self::CHUNK_SIZE_DEFAULT;
+	/** Default max filesize. */
 	private $max_filesize = self::CHUNK_SIZE_MAX;
 
+	/** Initial temporary directory. */
 	private $tempdir = null;
+	/** Initial destination directory. */
 	private $destdir = null;
 
+	/** Collected HTTP variables. */
 	private $args = [];
+	/** Verified request. */
 	private $request = [];
+	/** Verified chunk data. */
 	private $chunk_data = [];
 
+	/** Internal indicator that there has been upload error. */
 	private $upload_error = false;
 
 	/**
@@ -88,12 +97,14 @@ class ChunkUpload {
 	 *     BFITech\\ZapCoreDev\\RouterDev instance for testing.
 	 * @param string $tempdir Temporary upload directory.
 	 * @param string $destdir Destination directory.
-	 * @param string $post_prefix POST data prefix. Defaults to
+	 * @param string $post_prefix \_POST data prefix. Defaults to
 	 *     '__chupload_'.
-	 * @param int $chunk_size Chunk size, defaults to 2M. Make sure
+	 * @param int $chunk_size Chunk size. Defaults to
+	 *     ChunkUpload::CHUNK_SIZE_DEFAULT. Make sure
 	 *     this is below PHP `upload_max_filesize`.
-	 * @param int $max_filesize Maximum filesize, defaults to 10M.
-	 *     Not affected by `upload_max_filesize`.
+	 * @param int $max_filesize Maximum filesize. Defaults to
+	 *     ChunkUpload::CHUNK_SIZE_MAX. Not affected by
+	 *     `upload_max_filesize`.
 	 * @param Logger $logger An instance of logging service.
 	 *     If null, default logger with error log level and STDERR
 	 *     are used.
@@ -280,8 +291,8 @@ class ChunkUpload {
 	 * stripping EXIF tags. For longer processing, use destdir
 	 * and process from there to avoid script timeout, while keeping
 	 * return of this method always true. Also useful if you want to
-	 * integrate ChunkUpload as a part of generic zapcore routing
-	 * handler.
+	 * integrate ChunkUpload as a part of generic Router::route
+	 * callback.
 	 *
 	 * @return bool True on success.
 	 *
@@ -328,7 +339,7 @@ class ChunkUpload {
 	 * Override this if you want to stop uploader from printing
 	 * out JSON response and halt. Useful when you're integrating
 	 * ChunkUpload with other router. Parameters are ready to pass to
-	 * Router::print_json().
+	 * Router::print_json.
 	 *
 	 * @param int $errno Response error number.
 	 * @param array $data Response data. Typically null on failure.
@@ -363,8 +374,7 @@ class ChunkUpload {
 	 *
 	 * On success, this sets ChunkUpload::request.
 	 *
-	 * @return int $errno 0 on success, certain number from class
-	 *     constants on error.
+	 * @return int $errno 0 on success, certain errno otherwise.
 	 */
 	private function check_request() {
 		$Err = new ChunkUploadError;
@@ -411,8 +421,7 @@ class ChunkUpload {
 	 *
 	 * On success, this sets ChunkUpload::chunk_data.
 	 *
-	 * @return int $errno 0 on success, certain number from class
-	 *     constants on error.
+	 * @return int $errno 0 on success, certain errno otherwise.
 	 */
 	private function check_constraints() {
 		$Err = new ChunkUploadError;
@@ -492,8 +501,7 @@ class ChunkUpload {
 	 * integer appended at the end, representing index. The only
 	 * failure is due to I/O error.
 	 *
-	 * @return int $errno 0 on success, certain number from class
-	 *     constants on error.
+	 * @return int $errno 0 on success, certain errno otherwise.
 	 */
 	private function pack_chunk() {
 		$Err = new ChunkUploadError;
@@ -532,8 +540,7 @@ class ChunkUpload {
 	/**
 	 * Merge packed chunks to destination.
 	 *
-	 * @return int $errno 0 on success, certain number from class
-	 *     constants on error.
+	 * @return int $errno 0 on success, certain errno otherwise.
 	 */
 	private function merge_chunks() {
 		$Err = new ChunkUploadError;
@@ -591,8 +598,7 @@ class ChunkUpload {
 	/**
 	 * Finalize merging and execute post-processor.
 	 *
-	 * @return int $errno 0 on success, certain number from class
-	 *     constants on error.
+	 * @return int $errno 0 on success, certain errno otherwise.
 	 */
 	private function finalize() {
 		$log = self::$logger;
@@ -619,7 +625,19 @@ class ChunkUpload {
 	/**
 	 * Uploader.
 	 *
-	 * @param dict $args Router arguments.
+	 * Do not call this outside Router context. See class example for
+	 * usage.
+	 *
+	 * @param dict $args Router::route callback arguments of \_POST
+	 *     request with mandatory prefixed keys:
+	 *     - `(dict)post`
+	 *       - `(int)index`: chunk index starting from 0 at
+	 *                       first chunk
+	 *       - `(int)size`: total filesize
+	 *       - `(string)name`: file basename
+	 *     - `(dict)files`
+	 *       - `(string)blob`: chunk data as string
+	 * @todo Non-browser client code.
 	 */
 	public function upload(array $args) {
 		$Err = new ChunkUploadError;
@@ -670,6 +688,7 @@ class ChunkUpload {
 	 *
 	 * @return array Dict of standard arguments accepted by
 	 *     Router::route callback.
+	 * @see ChunkUpload::upload.
 	 */
 	public function get_args() {
 		if (!$this->args)
@@ -683,12 +702,12 @@ class ChunkUpload {
 	 * Retrieve request.
 	 *
 	 * @return array Dict of request data with keys:
-	 *     - `(string)name`, filename
-	 *     - `(int)size`, filesize
-	 *     - `(int)index`, chunk index
-	 *     - `(int)error`, builtin upload error code, UPLOAD_ERR_OK
+	 *     - `(string)name`: filename
+	 *     - `(int)size`: filesize
+	 *     - `(int)index`: chunk index
+	 *     - `(int)error`: builtin upload error code, `UPLOAD_ERR_OK`
 	 *       on success
-	 *     - `(string)blob`, uploaded chunk in string
+	 *     - `(string)blob`: uploaded chunk in string
 	 * @see https://archive.fo/x0nXY
 	 */
 	public function get_request() {
@@ -703,14 +722,14 @@ class ChunkUpload {
 	 * Retrieve chunk data.
 	 *
 	 * @return array Dict of chunk data with keys:
-	 *     - `(int)size`, total filesize
-	 *     - `(int)index`, chunk index
-	 *     - `(string)chunk_path`, chunk absolute path
-	 *     - `(int)max_chunk`, max chunk
-	 *     - `(string)chunk`, chunk blob as string
-	 *     - `(string)basename`, file basename
-	 *     - `(string)tempname`, file absolute tempname
-	 *     - `(string)destname`, file absolute destination
+	 *     - `(int)size`: total filesize
+	 *     - `(int)index`: chunk index
+	 *     - `(string)chunk_path`: chunk absolute path
+	 *     - `(int)max_chunk`: max chunk
+	 *     - `(string)chunk`: chunk blob as string
+	 *     - `(string)basename`: file basename
+	 *     - `(string)tempname`: file absolute tempname
+	 *     - `(string)destname`: file absolute destination
 	 */
 	public function get_chunk_data() {
 		if (!$this->chunk_data)
@@ -727,9 +746,9 @@ class ChunkUpload {
 	 * programmatically.
 	 *
 	 * @return array Dict containing keys:
-	 *     - `post_prefix`, verified _POST data prefix
-	 *     - `chunk_size`, verified cunk size
-	 *     - `max_filesize`, verified max filesize
+	 *     - `(string)post_prefix`: verified \_POST data prefix
+	 *     - `(int)chunk_size`: verified cunk size
+	 *     - `(int)max_filesize`: verified max filesize
 	 */
 	public function get_config() {
 		return [
