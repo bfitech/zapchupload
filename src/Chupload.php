@@ -39,7 +39,7 @@ class ChunkUpload {
 	/**
 	 * Default chunk size.
 	 *
-	 * On overriding, exception will be thrown if this condition are 
+	 * On overriding, exception will be thrown if this condition are
 	 * not met:<br>
 	 * > ChunkUpload::CHUNK_SIZE_MIN <
 	 * > ChunkUpload::CHUNK_SIZE_DEFAULT <
@@ -56,7 +56,7 @@ class ChunkUpload {
 	/**
 	 * Maximum chunk size.
 	 *
-	 * If this is too big, it will defeat the purpose of chunk 
+	 * If this is too big, it will defeat the purpose of chunk
 	 * uploading and most likely will hit `upload_max_size` on typical
 	 * PHP setup.
 	 **/
@@ -625,11 +625,21 @@ class ChunkUpload {
 	/**
 	 * Uploader.
 	 *
-	 * Do not call this outside Router context. See class example for
-	 * usage.
+	 * Do not call this outside Router::route context. See class example
+	 * for usage.
+	 *
+	 * Unless there is an intercept by ChunkUpload::intercept_response,
+	 * this will always send JSON dict response with keys: `errno` and
+	 * `data`. `errno` is non-zero integer and `data` is null on
+	 * failure. On success, `errno` is always zero and `data` is a dict
+	 * with keys:
+	 *     - `(int)index`: successfully-uploaded chunk index
+	 *     - `(string)path`: basename after processed by
+	 *       ChunkUpload::get_basename
+	 *     - `(bool)done`: false on mid-processing, true on last chunk
 	 *
 	 * @param dict $args Router::route callback arguments of \_POST
-	 *     request with mandatory prefixed keys:
+	 *     request with these prefixed keys:
 	 *     - `(dict)post`
 	 *       - `(int)index`: chunk index starting from 0 at
 	 *                       first chunk
@@ -637,7 +647,6 @@ class ChunkUpload {
 	 *       - `(string)name`: file basename
 	 *     - `(dict)files`
 	 *       - `(string)blob`: chunk data as string
-	 * @todo Non-browser client code.
 	 */
 	public function upload(array $args) {
 		$Err = new ChunkUploadError;
@@ -668,17 +677,22 @@ class ChunkUpload {
 		if (!$this->chunk_processing())
 			return $this->json([$Err::ECST_CHUNKPROC_FAIL]);
 
-		// merge chunks on finish and do post-processing
-		if ($max_chunk === $index && 0 !== $check = $this->finalize())
-			return $this->json([$check]);
+		$resp = [
+			'index'  => $index,
+			'path' => $basename,
+			'done' => false,
+		];
+		if ($max_chunk === $index) {
+			// merge chunks on finish and do post-processing
+			if (0 !== $check = $this->finalize())
+				return $this->json([$check]);
+			$resp['done'] = true;
+		}
 
 		// success
 		self::$logger->info(
 			"Chupload: file successfully uploaded: '$basename'.");
-		return $this->json([0, [
-			'path' => $basename,
-			'index'  => $index,
-		]]);
+		return $this->json([0, $resp]);
 	}
 
 	/* getters */

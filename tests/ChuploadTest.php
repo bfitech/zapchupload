@@ -433,7 +433,14 @@ class ChunkUploadTest extends ChunkUploadFixture {
 
 	public function test_upload_file_rounded_2_chunks() {
 		$fname = self::file_list()[3][0];
-		$this->_process_chunks($fname);
+		$this->_process_chunks(
+			$fname, '', null, function($core) {
+				$data = $core::$data;
+				if ($data['index'] == 0)
+					$this->ae($data['done'], false);
+				else
+					$this->ae($data['done'], true);
+		});
 		$this->_upload_ok($fname);
 	}
 
