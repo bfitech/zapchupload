@@ -473,7 +473,7 @@ class ChunkUpload {
 		$tempname = $this->tempdir . '/' . $basename;
 		$destname = $this->destdir . '/' . $basename;
 
-		# always overwrite old file with the same name, hence
+		# always overwrite old file with the same destname, hence
 		# make sure get_basename() guarantee uniqueness
 		// @codeCoverageIgnoreStart
 		if (file_exists($destname) && !$this->unlink($destname))
@@ -540,6 +540,13 @@ class ChunkUpload {
 	/**
 	 * Merge packed chunks to destination.
 	 *
+	 * Palallel uploads with the same destname cause unordered chunks.
+	 * Try it with `chupload-client.py` provided by the tutorial:
+	 *
+	 * @code
+	 * $ parallel -N0 ./chupload-client.py file.dat ::: 1 2
+	 * @endcode
+	 *
 	 * @return int $errno 0 on success, certain errno otherwise.
 	 */
 	private function merge_chunks() {
@@ -584,6 +591,12 @@ class ChunkUpload {
 			$total += $this->chunk_size;
 			fwrite($fho, $chunk);
 			$tail = fread($fhi, 2);
+			// @codeCoverageIgnoreStart
+			# missin tail, may happen on parallel uploads with the same
+			# destname
+			if (strlen($tail) < 2)
+				return $Err::ECST_MCH_UNORDERED;
+			// @codeCoverageIgnoreEnd
 			$i_unpack = unpack('vint', $tail)['int'];
 			if ($i !== $i_unpack)
 				return $Err::ECST_MCH_UNORDERED;
