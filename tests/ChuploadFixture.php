@@ -1,7 +1,7 @@
 <?php
 
 
-use PHPUnit\Framework\TestCase;
+use BFITech\ZapCoreDev\TestCase;
 
 
 define('CHUNK_SIZE', 1024 * 10);
@@ -15,7 +15,7 @@ define('MAX_FILESIZE', 1024 * 500);
  */
 class ChunkUploadFixture extends TestCase {
 
-	public static $tdir;
+	public static $udir;
 	public static $logfile;
 
 	protected $response;
@@ -25,23 +25,20 @@ class ChunkUploadFixture extends TestCase {
 	protected $pfx = '__chupload_';
 
 	public static function file_list() {
-		$tdir = getenv('CHUPLOAD_TESTDIR');
-		if (!$tdir || !is_dir($tdir))
-			$tdir = __DIR__ . '/htdocs-test/uploads';
-		if (!is_dir($tdir))
-			mkdir($tdir);
-		self::$tdir = $tdir;
+		$udir = self::tdir(
+			__DIR__ . '/htdocs-test/index.php', 'uploads');
+		self::$udir = $udir;
 		return [
 			# single chunk
-			[$tdir . '/zapchupload-test-1k.dat', 1],
+			[$udir . '/zapchupload-test-1k.dat', 1],
 			# within-range chunks
-			[$tdir . '/zapchupload-test-200k.dat', 200],
+			[$udir . '/zapchupload-test-200k.dat', 200],
 			# excessive chunks
-			[$tdir . '/zapchupload-test-520k.dat', 520],
+			[$udir . '/zapchupload-test-520k.dat', 520],
 			# rounded to 2 chunks
-			[$tdir . '/zapchupload-test-19k.dat', 19],
+			[$udir . '/zapchupload-test-19k.dat', 19],
 			# exactly 2 chunks
-			[$tdir . '/zapchupload-test-20k.dat', 20],
+			[$udir . '/zapchupload-test-20k.dat', 20],
 		];
 	}
 
