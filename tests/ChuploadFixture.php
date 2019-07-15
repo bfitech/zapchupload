@@ -87,8 +87,4 @@ class ChunkUploadFixture extends TestCase {
 		$this->assertSame($this->pfx, '__chupload_');
 	}
 
-	public function ae($i, $j) {
-		return $this->assertEquals($i, $j);
-	}
-
 }
