@@ -19,11 +19,8 @@ use BFITech\ZapCore\Logger;
  * use BFITech\ZapCore\Logger;
  * use BFITech\ZapChupload\ChunkUpload;
  *
- * $logger = new Logger;
- * $core = (new Router)->config('logger', $logger);
- * $chup = new ChunkUpload(
- *     $core, '/tmp/tempdir', '/tmp/destdir',
- *     null, null, null, $logger);
+ * $core = new Router;
+ * $chup = new ChunkUpload($core, '/tmp/tempdir', '/tmp/destdir');
  * $core->route('/upload', [$chup, 'upload'], 'POST']);
  * @endcode
  *
@@ -97,7 +94,7 @@ class ChunkUpload {
 	 *     BFITech\\ZapCoreDev\\RouterDev instance for testing.
 	 * @param string $tempdir Temporary upload directory.
 	 * @param string $destdir Destination directory.
-	 * @param string $post_prefix \_POST data prefix. Defaults to
+	 * @param string $post_prefix `_POST` data prefix. Defaults to
 	 *     '__chupload_'.
 	 * @param int $chunk_size Chunk size. Defaults to
 	 *     ChunkUpload::CHUNK_SIZE_DEFAULT. Make sure
@@ -106,8 +103,8 @@ class ChunkUpload {
 	 *     ChunkUpload::CHUNK_SIZE_MAX. Not affected by
 	 *     `upload_max_filesize`.
 	 * @param Logger $logger An instance of logging service.
-	 *     If null, default logger with error log level and STDERR
-	 *     are used.
+	 *     If null, default logger with error log level and stderr
+	 *     is used.
 	 */
 	public function __construct(
 		Router $core, string $tempdir, string $destdir,
@@ -248,10 +245,10 @@ class ChunkUpload {
 	 * certain rule.
 	 *
 	 * Due to its simplicity, this default implementation may
-	 * cause unordered packed chunks in the case of simultaneous
-	 * uploads of the same basename. One way to prevent
-	 * this is by using a shortlived random cookie for each request
-	 * and use ChunkUpload::post_processing to rename the file.
+	 * cause unordered packed chunks in case of simultaneous uploads
+	 * with the same basename. One way to prevent this is by using a
+	 * shortlived random cookie for each request and use
+	 * ChunkUpload::post_processing to rename the file.
 	 *
 	 * @return string File basename.
 	 * @see ChunkUpload::get_request.
@@ -261,7 +258,7 @@ class ChunkUpload {
 	}
 
 	/**
-	 * Pre-processing stub. Executes on first chunk.
+	 * Pre-processing stub. Executed on first chunk.
 	 *
 	 * Override this for pre-processing checks, e.g. when you want
 	 * to determine whether upload must proceed after certain
@@ -274,7 +271,7 @@ class ChunkUpload {
 	}
 
 	/**
-	 * Chunk processing. Executes on every chunk.
+	 * Chunk processing. Executed on every chunk.
 	 *
 	 * Use this for chunk-specific processing, e.g. fingerprinting.
 	 *
@@ -295,7 +292,6 @@ class ChunkUpload {
 	 * callback.
 	 *
 	 * @return bool True on success.
-	 *
 	 */
 	protected function post_processing() {
 		return true;
@@ -592,7 +588,7 @@ class ChunkUpload {
 			fwrite($fho, $chunk);
 			$tail = fread($fhi, 2);
 			// @codeCoverageIgnoreStart
-			# missin tail, may happen on parallel uploads with the same
+			# missing tail, may happen on parallel uploads with the same
 			# destname
 			if (strlen($tail) < 2)
 				return $Err::ECST_MCH_UNORDERED;
@@ -641,27 +637,32 @@ class ChunkUpload {
 	 * Do not call this outside Router::route context. See class example
 	 * for usage.
 	 *
-	 * Unless there is an intercept by ChunkUpload::intercept_response,
-	 * this will always send JSON dict response with keys: `errno` and
-	 * `data`. `errno` is non-zero integer and `data` is null on
-	 * failure. On success, `errno` is always zero and `data` is a dict
-	 * with keys:
-	 *     - `(int)index`: successfully-uploaded chunk index
-	 *     - `(string)path`: basename after processed by
-	 *       ChunkUpload::get_basename
-	 *     - `(bool)done`: false on mid-processing, true on last chunk
-	 *
-	 * @param dict $args Router::route callback arguments of \_POST
+	 * @param dict $args Router::route callback arguments of `_POST`
 	 *     request with these prefixed keys:
-	 *     - `(dict)post`
-	 *       - `(int)index`: chunk index starting from 0 at
-	 *                       first chunk
-	 *       - `(int)size`: total filesize
-	 *       - `(string)name`: file basename
-	 *     - `(dict)files`
-	 *       - `(string)blob`: chunk data as string
+	 *     - `dict` **post**
+	 *       - `int` **index**: chunk index starting from 0 at first
+	 *          chunk
+	 *       - `int` **size**: total filesize
+	 *       - `string` **name**: file basename
+	 *     - `dict` **files**
+	 *       - `string` **blob**: chunk data as string
+	 *
+	 * @note Unless there is an intercept by
+	 *     ChunkUpload::intercept_response, this will always send JSON
+	 *     dict response with keys: `errno` and `data`. `errno` is
+	 *     non-zero integer and `data` is null on failure.
+	 *     <br>
+	 *     On success, `errno` is always zero and `data` is a dict with
+	 *     keys:
+	 *     - `int` **index**: successfully-uploaded chunk index
+	 *     - `string` **path**: basename after processing by
+	 *       ChunkUpload::get_basename
+	 *     - `bool` **done**: false on mid-processing, true on last
+	 *       chunk
+	 * @see ChunkUploadError
+	 *
 	 */
-	public function upload(array $args) {
+	final public function upload(array $args) {
 		$Err = new ChunkUploadError;
 		$this->args = $args;
 
@@ -717,7 +718,7 @@ class ChunkUpload {
 	 *     Router::route callback.
 	 * @see ChunkUpload::upload.
 	 */
-	public function get_args() {
+	final public function get_args() {
 		if (!$this->args)
 			throw new ChunkUploadError(
 				ChunkUploadError::EINI_PROPERTY_EMPTY,
@@ -726,18 +727,18 @@ class ChunkUpload {
 	}
 
 	/**
-	 * Retrieve request.
+	 * Retrieve request data.
 	 *
 	 * @return array Dict of request data with keys:
-	 *     - `(string)name`: filename
-	 *     - `(int)size`: filesize
-	 *     - `(int)index`: chunk index
-	 *     - `(int)error`: builtin upload error code, `UPLOAD_ERR_OK`
+	 *     - `string` **name**: filename
+	 *     - `int` **size**: filesize
+	 *     - `int` **index**: chunk index
+	 *     - `int` **error**: builtin upload error code, `UPLOAD_ERR_OK`
 	 *       on success
-	 *     - `(string)blob`: uploaded chunk in string
+	 *     - `string` **blob**: uploaded chunk in string
 	 * @see https://archive.fo/x0nXY
 	 */
-	public function get_request() {
+	final public function get_request() {
 		if (!$this->request)
 			throw new ChunkUploadError(
 				ChunkUploadError::EINI_PROPERTY_EMPTY,
@@ -749,16 +750,16 @@ class ChunkUpload {
 	 * Retrieve chunk data.
 	 *
 	 * @return array Dict of chunk data with keys:
-	 *     - `(int)size`: total filesize
-	 *     - `(int)index`: chunk index
-	 *     - `(string)chunk_path`: chunk absolute path
-	 *     - `(int)max_chunk`: max chunk
-	 *     - `(string)chunk`: chunk blob as string
-	 *     - `(string)basename`: file basename
-	 *     - `(string)tempname`: file absolute tempname
-	 *     - `(string)destname`: file absolute destination
+	 *     - `int` **size**: total filesize
+	 *     - `int` **index**: chunk index
+	 *     - `string` **chunk_path**: chunk absolute path
+	 *     - `int` **max_chunk**: max chunk
+	 *     - `string` **chunk**: chunk blob as string
+	 *     - `string` **basename**: file basename
+	 *     - `string` **tempname**: file absolute tempname
+	 *     - `string` **destname**: file absolute destination
 	 */
-	public function get_chunk_data() {
+	final public function get_chunk_data() {
 		if (!$this->chunk_data)
 			throw new ChunkUploadError(
 				ChunkUploadError::EINI_PROPERTY_EMPTY,
@@ -773,11 +774,11 @@ class ChunkUpload {
 	 * programmatically.
 	 *
 	 * @return array Dict containing keys:
-	 *     - `(string)post_prefix`: verified \_POST data prefix
-	 *     - `(int)chunk_size`: verified cunk size
-	 *     - `(int)max_filesize`: verified max filesize
+	 *     - `string` **post_prefix**: verified `_POST` data prefix
+	 *     - `int` **chunk_size**: verified cunk size
+	 *     - `int` **max_filesize**: verified max filesize
 	 */
-	public function get_config() {
+	final public function get_config() {
 		return [
 			'post_prefix' => $this->post_prefix,
 			'chunk_size' => $this->chunk_size,
