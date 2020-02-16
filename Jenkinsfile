@@ -9,7 +9,7 @@ pipeline {
                 branch 'master'
             }
             steps {
-                sh 'docker-phpunit 7.0 7.4'
+                sh 'docker-phpunit -u 7.0 7.4'
             }
             post {
                 success {
