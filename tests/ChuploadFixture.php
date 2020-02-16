@@ -49,6 +49,9 @@ class ChunkUploadFixture extends TestCase {
 		);
 	}
 
+	/**
+	 * Read chunk of a file.
+	 */
 	public static function make_chunk($file, $chunk_size, $index) {
 		$hn = fopen($file, 'rb');
 		$pos = $chunk_size * $index;
@@ -58,6 +61,18 @@ class ChunkUploadFixture extends TestCase {
 		return $chunk;
 	}
 
+	/**
+	 * Simulate client-side uploading the whole chunks of a file.
+	 *
+	 * All payload is sent as _POST since client doesn't differ _POST
+	 * and _FILES as PHP does.
+	 *
+	 * @param string $file Filename.
+	 * @param int $size Chunk size.
+	 * @param callable $callback What to do with the payload. Execute
+	 *     RouterDev::request here.
+	 * @param callable $tamper Method to tamper with the payload.
+	 */
 	public static function upload_chunks(
 		$file, $chunk_size, $callback, $tamper=null
 	) {
