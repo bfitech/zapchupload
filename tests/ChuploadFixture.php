@@ -30,16 +30,25 @@ class ChunkUploadFixture extends TestCase {
 		self::$udir = $udir;
 		return [
 			# single chunk
-			[$udir . '/zapchupload-test-1k.dat', 1],
+			'single' => [
+				$udir . '/zapchupload-test-1k.dat', 1],
 			# within-range chunks
-			[$udir . '/zapchupload-test-200k.dat', 200],
+			'in-range' => [
+				$udir . '/zapchupload-test-200k.dat', 200],
 			# excessive chunks
-			[$udir . '/zapchupload-test-520k.dat', 520],
+			'excessive' => [
+				$udir . '/zapchupload-test-520k.dat', 520],
 			# rounded to 2 chunks
-			[$udir . '/zapchupload-test-19k.dat', 19],
+			'double-rounded' => [
+				$udir . '/zapchupload-test-19k.dat', 19],
 			# exactly 2 chunks
-			[$udir . '/zapchupload-test-20k.dat', 20],
+			'double-exact' => [
+				$udir . '/zapchupload-test-20k.dat', 20],
 		];
+	}
+
+	public static function file_name($key) {
+		return self::file_list()[$key][0];
 	}
 
 	public static function generate_file($path, $size) {
@@ -99,7 +108,7 @@ class ChunkUploadFixture extends TestCase {
 	}
 
 	public function test_prefix() {
-		$this->assertSame($this->pfx, '__chupload_');
+		$this->sm()($this->pfx, '__chupload_');
 	}
 
 }
