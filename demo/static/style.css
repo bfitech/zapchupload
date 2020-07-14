@@ -41,6 +41,12 @@ button {
 	color: black;
 }
 
-.list p {
+p {
 	margin: 0 0 .5em;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.list p a {
+	margin-right: .5em;
 }

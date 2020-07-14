@@ -19,6 +19,16 @@ class ChunkUploadDemo extends ChunkUpload {
 
 	public static $datadir;
 
+	protected function chunk_processing() {
+		$args = $this->get_args();
+		$key = $this->get_config()['post_prefix'] . 'sum';
+		$csum = $args['post'][$key] ?? null;
+		if (!$csum)
+			return false;
+		$ssum = hash('sha256', $this->get_chunk_data()['chunk']);
+		return hash_equals($csum, $ssum);
+	}
+
 	protected function intercept_response(
 		int &$errno, array &$data=null, int &$http_code=200
 	) {

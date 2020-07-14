@@ -9,17 +9,15 @@ class ChuploadError {
 	}
 }
 
-const E_FILESLICE_NOT_FOUND = 0x0100;
-const E_UPLOAD_STARTED = 0x0101;
-const E_UNFINISHED = 0x0102;
+const E_UPLOAD_STARTED = 0x0100;
+const E_UNFINISHED = 0x0101;
 
 class Chupload {
 
 	constructor(
 		file, url,
 		pfx, chunkSz,
-		cbChunkOk, cbFileOk, cbError,
-		cbProgress, chunkFingerprint, postData
+		cbChunkOk, cbFileOk, cbError, cbProgress
 	) {
 		this.file = file;
 
@@ -32,28 +30,12 @@ class Chupload {
 		this.cbError = cbError || (() => {});
 		this.cbProgress = cbProgress || (() => {});
 
-		this.chunkFingerprint = chunkFingerprint || (() => {});
-
-		this.postData = postData;
-
 		this.chunkIndex = -1;
 		this.chunkMax = -1;
 
 		this.progress = -1;
 		this.started = false;
 		this.cancelled = false;
-
-		// check browser compatibility
-		this.slicer = null;
-		if ('slice' in this.file)
-			this.slicer = 'slice';
-		else if ('mozSlice' in this.file)
-			this.slicer = 'mozSlice';
-		else if ('webkitSlice' in this.file)
-			this.slicer = 'webkitSlice';
-		else
-			throw new ChuploadError(
-				E_FILESLICE_NOT_FOUND, "fileSlice not supported");
 	}
 
 	start() {
@@ -71,17 +53,25 @@ class Chupload {
 	uploadChunk() {
 		const bgn = this.chunkSz * this.chunkIndex;
 		const end = bgn + this.chunkSz;
-		const blob = this.file[this.slicer](bgn, end);
+		const blob = this.file.slice(bgn, end);
 
+		blob.arrayBuffer().then(msg => {
+			crypto.subtle.digest('SHA-256', msg).then(buf => {
+				const sum = Array.from(new Uint8Array(buf)).
+					map(b => b.toString(16).padStart(2, '0')).join('');
+				this.send(blob, sum);
+			});
+		});
+	}
+
+	send(blob, sum) {
 		const form = new FormData();
 		const pfx = this.postPrefix;
 		form.append(pfx + 'name', this.file.name);
 		form.append(pfx + 'size', this.file.size);
 		form.append(pfx + 'index', this.chunkIndex);
 		form.append(pfx + 'blob', blob);
-		form.append(pfx + 'fingerprint', this.chunkFingerprint(blob));
-		for (let i in this.postData)
-			form.append(i, this.postData[i]);
+		form.append(pfx + 'sum', sum);
 
 		m.request({
 			method: 'POST',
@@ -132,6 +122,8 @@ const app = {
 	path: null,
 	errno: 0,
 
+	attr: {},
+
 	uploader: null,
 
 	reset() {
@@ -152,6 +144,7 @@ const app = {
 		this.progress = 0;
 		this.file = null;
 		this.path = resp.data.path;
+		this.attr = resp.data;
 		this.fileList();
 	},
 	cbError(resp) {
@@ -171,7 +164,7 @@ const app = {
 				null,
 				resp => this.cbFileOk(resp),
 				resp => this.cbError(resp),
-				progress => this.cbProgress(progress), null, []
+				progress => this.cbProgress(progress)
 			);
 			this.uploader.start();
 		} catch(err) {
@@ -253,12 +246,18 @@ const app = {
 	elePath() {
 		if (!this.path)
 			return;
+		const attr = this.attr;
 		return [
-			m('span', 'OK:'),
-			m('a', {
-				href: './download/?fname=' + this.path,
-				target: '_blank',
-			}, this.path),
+			m('p', [
+				m('strong', 'OK: '),
+				m('a', {
+					href: './download/?fname=' + this.path,
+					target: '_blank',
+				}, this.path),
+			]),
+			m('hr'),
+			m('p', [m('strong', '• SIZE: '), attr.size]),
+			m('p', [m('strong', '• TYPE: '), attr.content_type]),
 		];
 	},
 
@@ -266,8 +265,8 @@ const app = {
 		if (!app.errno)
 			return;
 		return [
-			m('span', 'ERROR with errno: 0x0' +
-				app.errno.toString(16) + '.'),
+			m('span', 'ERROR with errno: 0x' +
+				app.errno.toString(16).padStart(4, '0') + '.'),
 		];
 	},
 
@@ -297,8 +296,7 @@ const app = {
 				onclick() {
 					self.fileRemove(ele);
 				},
-			}, 'x'),
-			m('span', ' '),
+			}, '\u2716'),
 			m('a', {
 				href: './download?fname=' + ele,
 				target: '_blank',
@@ -325,6 +323,7 @@ const app = {
 				m('span', {
 					onclick() {
 						self.tab = 'list';
+						self.reset();
 					},
 					class: self.tab === 'list' ? 'active' : '',
 				}, 'list'),
