@@ -52,7 +52,7 @@ class ChunkUploadChunkProc extends ChunkUpload {
 class ChunkUploadIntercept extends ChunkUploadChunkProc {
 
 	public function intercept_response(
-		int $errno, array $data=null, int $http_code=200
+		int &$errno, array &$data=null, int &$http_code=200
 	) {
 		self::$core::print_json($errno, $data, $http_code);
 		return false;

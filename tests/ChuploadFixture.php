@@ -24,11 +24,13 @@ class ChunkUploadFixture extends TestCase {
 
 	protected $pfx = '__chupload_';
 
+	private static $flist = [];
+
 	public static function file_list() {
-		$udir = self::tdir(
-			__DIR__ . '/htdocs-test/index.php', 'uploads');
-		self::$udir = $udir;
-		return [
+		self::$udir = $udir = self::tdir(__FILE__);
+		if (self::$flist)
+			return self::$flist;
+		return self::$flist = [
 			# single chunk
 			'single' => [
 				$udir . '/zapchupload-test-1k.dat', 1],

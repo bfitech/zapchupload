@@ -102,17 +102,16 @@ class ChunkUpload {
 	 * @param int $max_filesize Maximum filesize. Defaults to
 	 *     ChunkUpload::CHUNK_SIZE_MAX. Not affected by
 	 *     `upload_max_filesize`.
-	 * @param Logger $logger An instance of logging service.
-	 *     If null, default logger with error log level and stderr
-	 *     is used.
+	 * @param Logger $log An instance of logging service. If null,
+	 *     default logger with error log level and stderr is used.
 	 */
 	public function __construct(
 		Router $core, string $tempdir, string $destdir,
 		string $post_prefix=null, int $chunk_size=null,
-		int $max_filesize=null, Logger $logger=null
+		int $max_filesize=null, Logger $log=null
 	) {
 		self::$core = $core;
-		self::$logger = $logger ?? new Logger;
+		self::$logger = $log ?? new Logger;
 
 		$this->prepare_prefix($post_prefix);
 		$this->prepare_sizes($chunk_size, $max_filesize);
@@ -337,17 +336,18 @@ class ChunkUpload {
 	 * ChunkUpload with other router. Parameters are ready to pass to
 	 * Router::print_json.
 	 *
-	 * @param int $errno Response error number.
-	 * @param array $data Response data. Typically null on failure.
-	 * @param int $http_errno HTTP status code.
-	 * @return bool If true, send JSON response and halt.
+	 * @param int &$errno Response error number.
+	 * @param array &$data Response data. Typically null on failure.
+	 * @param int &$http_errno HTTP status code.
+	 * @return bool If true, ChunkUpload::json will send JSON response
+	 *     and halt.
 	 *
 	 * @cond
 	 * @SuppressWarnings(PHPMD.UnusedFormalParameter)
 	 * @endcond
 	 */
 	protected function intercept_response(
-		int $errno, array $data=null, int $http_errno=200
+		int &$errno, array &$data=null, int &$http_errno=200
 	) {
 		return true;
 	}
@@ -536,7 +536,7 @@ class ChunkUpload {
 	/**
 	 * Merge packed chunks to destination.
 	 *
-	 * Palallel uploads with the same destname cause unordered chunks.
+	 * Parallel uploads with the same destname cause unordered chunks.
 	 * Try it with `chupload-client.py` provided by the tutorial:
 	 *
 	 * @code

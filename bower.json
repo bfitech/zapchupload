@@ -1,7 +1,0 @@
-{
-  "name": "test",
-  "private": true,
-  "dependencies": {
-    "angular-chupload": "^1"
-  }
-}
