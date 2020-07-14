@@ -1,0 +1,46 @@
+
+a{
+	color: blue;
+	text-decoration: underline;
+	cursor: pointer;
+}
+#wrap{
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 90vh;
+	font-family: monospace;
+}
+#box{
+	height: 24em;
+	padding: 8px 16px;
+	border: 1px solid rgba(0, 0, 0, .2);
+	width: 400px;
+	overflow: auto;
+}
+
+hr{
+	height:0;
+	border:0;
+	border-bottom:3px solid rgba(0, 0, 0, .1);
+}
+input[type=file] {
+	display: none;
+}
+button {
+	margin-right: 4px;
+}
+
+.tab span {
+	margin-right: .5em;
+	font-weight: bold;
+	cursor: pointer;
+	color: blue;
+}
+.tab span.active {
+	color: black;
+}
+
+.list p {
+	margin: 0 0 .5em;
+}
