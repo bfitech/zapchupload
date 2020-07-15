@@ -72,7 +72,7 @@ $chup = new ChunkUpload(
     null, null, null, $log);
 
 // uploader route
-$core->route('/upload', [$chup, 'upload'], 'POST']);
+$core->route('/upload', [$chup, 'upload'], 'POST');
 
 // downloader route for testing
 $core->route('/', function($args) use($core) {
