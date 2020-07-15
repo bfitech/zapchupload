@@ -11,22 +11,6 @@ use BFITech\ZapCore\Logger;
 /**
  * ChunkUpload class.
  *
- * Example:
- * @code
- * <?php
- *
- * use BFITech\ZapCore\Router;
- * use BFITech\ZapCore\Logger;
- * use BFITech\ZapChupload\ChunkUpload;
- *
- * $core = new Router;
- * $chup = new ChunkUpload($core, '/tmp/tempdir', '/tmp/destdir');
- * $core->route('/upload', [$chup, 'upload'], 'POST']);
- * @endcode
- *
- * @see https://git.io/fjCho for sample client implementation using
- *     AngularJS.
- *
  * @cond
  * @SuppressWarnings(PHPMD.ExcessiveClassComplexity)
  * @endcond
@@ -36,8 +20,8 @@ class ChunkUpload {
 	/**
 	 * Default chunk size.
 	 *
-	 * On overriding, exception will be thrown if this condition are
-	 * not met:<br>
+	 * On overriding, exception will be thrown if this condition is not
+	 * met:<br>
 	 * > ChunkUpload::CHUNK_SIZE_MIN <
 	 * > ChunkUpload::CHUNK_SIZE_DEFAULT <
 	 * > ChunkUpload::CHUNK_SIZE_MAX
