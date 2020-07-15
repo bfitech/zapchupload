@@ -34,7 +34,8 @@ class ChunkUploadDemo extends ChunkUpload {
 	) {
 		if ($errno !== 0)
 			return true;
-		if (!isset($data['done']))
+		$done = $data['done'] ?? null;
+		if (!$done)
 			return true;
 		$fname = self::$datadir . '/' . $data['path'];
 		# add additional attributes

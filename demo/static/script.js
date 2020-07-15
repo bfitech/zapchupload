@@ -2,6 +2,11 @@
 /* global m */
 /* eslint no-undef: "error" */
 
+
+const E_UPLOAD_STARTED = 0x0100;
+const E_UNFINISHED = 0x0101;
+
+
 class ChuploadError {
 	constructor(errno, errmsg) {
 		this.errno = errno;
@@ -9,11 +14,8 @@ class ChuploadError {
 	}
 }
 
-const E_UPLOAD_STARTED = 0x0100;
-const E_UNFINISHED = 0x0101;
 
 class Chupload {
-
 	constructor(
 		file, url,
 		pfx, chunkSz,
@@ -43,14 +45,13 @@ class Chupload {
 			throw new ChuploadError(
 				E_UPLOAD_STARTED, "upload already started");
 
-		// calculate chunk size
 		this.chunkMax = Math.floor(this.file.size / this.chunkSz);
 		this.chunkIndex = 0;
 
-		this.uploadChunk();
+		this._hash();
 	}
 
-	uploadChunk() {
+	_hash() {
 		const bgn = this.chunkSz * this.chunkIndex;
 		const end = bgn + this.chunkSz;
 		const blob = this.file.slice(bgn, end);
@@ -59,12 +60,12 @@ class Chupload {
 			crypto.subtle.digest('SHA-256', msg).then(buf => {
 				const sum = Array.from(new Uint8Array(buf)).
 					map(b => b.toString(16).padStart(2, '0')).join('');
-				this.send(blob, sum);
+				this._send(blob, sum);
 			});
 		});
 	}
 
-	send(blob, sum) {
+	_send(blob, sum) {
 		const form = new FormData();
 		const pfx = this.postPrefix;
 		form.append(pfx + 'name', this.file.name);
@@ -92,8 +93,7 @@ class Chupload {
 			this.chunkIndex++;
 
 			// successful chunk upload
-			this.progress = ((this.chunkIndex / this.chunkMax) * 100)
-				.toString().replace(/\.([0-9]{2}).+/, '.$1');
+			this.progress = (this.chunkIndex / this.chunkMax) * 100;
 			this.cbChunkOk(resp);
 
 			// cancelled
@@ -104,7 +104,7 @@ class Chupload {
 			this.cbProgress(this.progress);
 
 			// continue to next chunk
-			this.uploadChunk();
+			this._hash();
 		}).catch(resp => {
 			this.cbError(resp.response);
 		});
@@ -116,49 +116,49 @@ class Chupload {
 }
 
 
-const app = {
-	progress: 0,
-	file: null,
-	path: null,
-	errno: 0,
+class Upload {
+	file = null;
+	progress = 0;
+	path = null;
+	attr = {};
 
-	attr: {},
+	errno = 0;
 
-	uploader: null,
+	chupload = null;
+	download = null;
+
+	constructor(app, download) {
+		this.app = app;
+		this.download = download;
+	}
 
 	reset() {
 		this.progress = 0;
 		this.file = null;
 		this.path = null;
-	},
+	}
 
-	getConfig() {
-		m.request(
-			'./config'
-		).then(resp => {
-			this.config = resp.data;
-		}).catch(() => {});
-	},
-
+	// callbacks
 	cbFileOk(resp) {
 		this.progress = 0;
 		this.file = null;
 		this.path = resp.data.path;
 		this.attr = resp.data;
-		this.fileList();
-	},
+		this.download.load();
+	}
 	cbError(resp) {
-		// FIXME: using this.error is always received as 0 by eleError
-		app.errno = resp.errno;
+		this.errno = resp.errno;
 		this.reset();
-	},
+	}
 	cbProgress(progress) {
-		this.progress = Number(progress);
-	},
+		this.progress = progress;
+	}
+
+	// handlers
 	upload() {
-		const cnf = this.config;
+		const cnf = this.app.config;
 		try {
-			this.uploader = new Chupload(
+			this.chupload = new Chupload(
 				this.file, './upload',
 				cnf.post_prefix, cnf.chunk_size,
 				null,
@@ -166,18 +166,19 @@ const app = {
 				resp => this.cbError(resp),
 				progress => this.cbProgress(progress)
 			);
-			this.uploader.start();
+			this.chupload.start();
 		} catch(err) {
 			this.errno = err.errno;
 		}
-	},
+	}
 	cancel() {
-		if (!this.uploader)
+		if (!this.chupload)
 			return;
-		this.uploader.cancel();
-		this.uploader = null;
-	},
+		this.chupload.cancel();
+		this.chupload = null;
+	}
 
+	// controls
 	eleFile() {
 		const self = this;
 		return m('input', {
@@ -189,19 +190,19 @@ const app = {
 				self.file = this.files[0];
 			},
 		});
-	},
+	}
 	elePicker(upl) {
+		const self = this;
 		if (!this.file) {
 			return m('a', {
 				onclick() {
-					app.errno = 0;
+					self.errno = 0;
 					upl.dom.click();
 				},
 			}, 'pick a file');
 		}
 		return m('span', this.file.name);
-	},
-
+	}
 	eleProgress() {
 		if (!this.progress)
 			return;
@@ -209,40 +210,7 @@ const app = {
 			max: 100,
 			value: this.progress,
 		}, this.progress + '%')];
-	},
-
-	btnReset() {
-		if (!this.file)
-			return;
-		const self = this;
-		return m('button', {
-			onclick() {
-				self.reset();
-			},
-		}, 'reset');
-	},
-	btnUpload(upl) {
-		if (!this.file)
-			return;
-		const self = this;
-		return m('button', {
-			onclick() {
-				self.upload(upl);
-			},
-		}, 'upload');
-	},
-	btnCancel() {
-		if (!this.progress || this.progress === 100)
-			return;
-		const self = this;
-		return m('button', {
-			onclick() {
-				self.cancel();
-				self.reset();
-			},
-		}, 'cancel');
-	},
-
+	}
 	elePath() {
 		if (!this.path)
 			return;
@@ -259,80 +227,51 @@ const app = {
 			m('p', [m('strong', '• SIZE: '), attr.size]),
 			m('p', [m('strong', '• TYPE: '), attr.content_type]),
 		];
-	},
-
+	}
 	eleError() {
-		if (!app.errno)
+		if (!this.errno)
 			return;
 		return [
 			m('span', 'ERROR with errno: 0x' +
-				app.errno.toString(16).padStart(4, '0') + '.'),
+				this.errno.toString(16).padStart(4, '0') + '.'),
 		];
-	},
+	}
 
-	list: [],
-	fileList() {
-		m.request('./list').then(resp => {
-			this.list = resp.data;
-		}).catch(() => {});
-	},
-	fileRemove(ele) {
-		m.request({
-			method: 'DELETE',
-			url: './remove',
-			body: ele,
-			serialize(data) {
-				return data;
+	// buttons
+	btnReset() {
+		if (!this.file)
+			return;
+		const self = this;
+		return m('button', {
+			onclick() {
+				self.reset();
 			},
-		}).then(() => {}).catch(() => {}).finally(() => {
-			this.fileList();
-		});
-	},
-	fileEle(ele) {
+		}, 'reset');
+	}
+	btnUpload(upl) {
+		if (!this.file)
+			return;
 		const self = this;
-		return m('p', [
-			m('a', {
-				title: 'delete',
-				onclick() {
-					self.fileRemove(ele);
-				},
-			}, '\u2716'),
-			m('a', {
-				href: './download?fname=' + ele,
-				target: '_blank',
-			}, ele),
-		]);
-	},
-
-	oninit() {
-		this.getConfig();
-		this.fileList();
-	},
-
-	tab: 'upload',
-	viewTab() {
+		return m('button', {
+			onclick() {
+				self.upload(upl);
+			},
+		}, 'upload');
+	}
+	btnCancel() {
+		if (!this.progress || this.progress === 100)
+			return;
 		const self = this;
-		return [
-			m('div.tab', [
-				m('span', {
-					onclick() {
-						self.tab = 'upload';
-					},
-					class: self.tab === 'upload' ? 'active' : '',
-				}, 'upload'),
-				m('span', {
-					onclick() {
-						self.tab = 'list';
-						self.reset();
-					},
-					class: self.tab === 'list' ? 'active' : '',
-				}, 'list'),
-				m('hr'),
-			]),
-		];
-	},
-	viewUpload() {
-		if (this.tab !== 'upload')
+		return m('button', {
+			onclick() {
+				self.cancel();
+				self.reset();
+			},
+		}, 'cancel');
+	}
+
+	view() {
+		if (this.app.tab !== 'upload')
 			return;
 		const inp = this.eleFile();
 		return [
@@ -348,24 +287,104 @@ const app = {
 			]),
 			m('div', this.eleProgress()),
 		];
-	},
-	viewList() {
-		if (this.tab !== 'list')
+	}
+}
+
+class Download {
+	app = null;
+	list = [];
+
+	constructor(app) {
+		this.app = app;
+		this.load();
+	}
+
+	remove(ele) {
+		m.request({
+			method: 'DELETE',
+			url: './remove',
+			body: ele,
+			serialize(data) {
+				return data;
+			},
+		}).then(() => {}).catch(() => {}).finally(() => {
+			this.load();
+		});
+	}
+
+	load() {
+		m.request('./list').then(resp => {
+			this.list = resp.data;
+		}).catch(() => {});
+	}
+
+	fileEle(ele) {
+		const self = this;
+		return m('p', [
+			m('a', {
+				title: 'delete',
+				onclick() {
+					self.remove(ele);
+				},
+			}, '\u2716'),
+			m('a', {
+				href: './download?fname=' + ele,
+				target: '_blank',
+			}, ele),
+		]);
+	}
+	view() {
+		if (this.app.tab !== 'list')
 			return;
 		return [
 			m('div.list', this.list.map(ele => this.fileEle(ele))),
 		];
-	},
+	}
+}
+
+
+class App {
+	uploader = null;
+	download = null;
+	tab = 'upload';
+
+	oninit() {
+		m.request(
+			'./config'
+		).then(resp => {
+			this.config = resp.data;
+		}).catch(() => {}).finally(() => {
+			this.download = new Download(this);
+			this.upload = new Upload(this, this.download);
+		});
+	}
+
 	view() {
 		if (!this.config)
 			return;
+		const self = this;
 		return m('div', [
-			this.viewTab(),
-			m('div', this.viewUpload(), this.viewList())
+			m('div.tab', [
+				m('span', {
+					onclick() {
+						self.tab = 'upload';
+					},
+					class: self.tab === 'upload' ? 'active' : '',
+				}, 'upload'),
+				m('span', {
+					onclick() {
+						self.tab = 'list';
+						self.upload.reset();
+						self.upload.errno = 0;
+					},
+					class: self.tab === 'list' ? 'active' : '',
+				}, 'list'),
+				m('hr'),
+			]),
+			m('div', this.upload.view(), this.download.view())
 		]);
-	},
-};
+	}
+}
 
 
-// root
-m.mount(document.querySelector('#box'), app);
+m.mount(document.querySelector('#box'), new App);
