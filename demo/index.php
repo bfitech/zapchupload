@@ -29,6 +29,9 @@ class ChunkUploadDemo extends ChunkUpload {
 		return hash_equals($csum, $ssum);
 	}
 
+	/**
+	 * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+	 */
 	protected function intercept_response(
 		int &$errno, array &$data=null, int &$http_code=200
 	) {
@@ -44,6 +47,7 @@ class ChunkUploadDemo extends ChunkUpload {
 		$data['content_type'] = Common::get_mimetype($fname);
 		return true;
 	}
+
 }
 
 class Web {
@@ -66,7 +70,7 @@ class Web {
 
 		$log = new Logger(
 			constant('BFITech\ZapCore\Logger::' . $gcf('log.level')),
-		   	$gcf('log.file'));
+			$gcf('log.file'));
 		$core = self::$core = (new Router)
 			->config('logger', $log);
 
@@ -96,7 +100,7 @@ class Web {
 		self::$cnf = $cnf;
 	}
 
-	public function route_home(array $args) {
+	public function route_home() {
 		$mithril = '//cdnjs.cloudflare.com/ajax/libs/mithril/' .
 			'2.0.4/mithril.min.js';
 		self::$core::start_header(200, 30);
@@ -151,7 +155,7 @@ EOD;
 		$core::pj([0, null], 200);
 	}
 
-	public function route_list(array $args) {
+	public function route_list() {
 		$list = [];
 		foreach (glob(self::$chup::$datadir . '/*') as $fname) {
 			if (is_dir($fname))
@@ -161,7 +165,7 @@ EOD;
 		return self::$core::pj([0, $list]);
 	}
 
-	public function route_config(array $args) {
+	public function route_config() {
 		return self::$core::pj([0, self::$chup->get_config()]);
 	}
 
