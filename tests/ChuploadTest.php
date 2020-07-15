@@ -72,8 +72,6 @@ class ChunkUploadPostProc extends ChunkUpload {
 
 class ChunkUploadTest extends ChunkUploadFixture {
 
-	#public static $core;
-
 	public static function setUpBeforeClass() {
 		foreach (self::file_list() as $file) {
 			if (!file_exists($file[0]))
@@ -88,7 +86,8 @@ class ChunkUploadTest extends ChunkUploadFixture {
 		$eq = self::eq();
 
 		$log = new Logger(Logger::ERROR, self::$logfile);
-		$core = (new RouterDev)->config('logger', $log);
+		$core = (new RouterDev)
+			->config('logger', $log);
 		$udir = self::$udir;
 
 		$tempdir = $udir . "/xtemp";
