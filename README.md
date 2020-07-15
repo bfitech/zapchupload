@@ -15,24 +15,27 @@ Server-side chunk uploader.
 This package provides PHP the ability to upload possibly ultra-big file
 in smaller chunks.
 
-But why? What's wrong with standard HTTP form? Here are some primary
-considerations:
+But why? What's wrong with standard HTTP form?
+
+Some primary considerations:
 
 pros:
 
-- Server is less affected by `upload_max_filesize` directive. Filesize
-  limit may come from disk space or filesystem limitation.
-- Consequently, this can circumvent time limit set by
-  `max_execution_time`.
-- Each chunk can be processed for, e.g. fingerprinting, so there's a
-  way to fail early when file is corrupt.
+- No worry about RAM and other server intrinsic limitations.
+- If configured properly, no worry about `upload_max_filesize` and
+  consequently `max_execution_time` directives. Filesize limit may still
+  come from disk space or filesystem limitation.
+- Each chunk can be processed for, e.g. fingerprinting, so there's a way
+  to fail early when file is corrupt in transit.
+- Easily configurable to work with your other web app routers.
+- Works on plain PHP. No web server tweaks necessary.
 
 cons:
 
 - Network overhead explodes because multiple requests must be made to
   upload even a single file.
-- A special client must be crafted. Standard HTTP upload form will
-  generally not work.
+- A special client must be crafted. Standard HTTP upload form will not
+  work.
 
 
 ## Installation
@@ -58,24 +61,25 @@ use BFITech\ZapCore\Logger;
 use BFITech\ZapChupload\ChunkUpload;
 
 // create a logging service
-$logger = new Logger;
+$log = new Logger;
 
 // create a router
-$core = (new Router)->config('logger', $logger);
+$core = (new Router)->config('logger', $log);
 
 // instantiate the chunk uploader class
 $chup = new ChunkUpload(
     $core, '/tmp/tempdir', '/tmp/destdir',
-    null, null, null, $logger);
+    null, null, null, $log);
 
 // uploader route
 $core->route('/upload', [$chup, 'upload'], 'POST']);
 
 // downloader route for testing
 $core->route('/', function($args) use($core) {
-	$file = get['file'] ?? null;
+	$file = $args['get']['file'] ?? null;
 	if ($file)
 		$core->static_file('/tmp/destdir/' . $file);
+	$core::halt('HELLO WORLD');
 });
 
 // that's it
@@ -84,7 +88,7 @@ $core->route('/', function($args) use($core) {
 You can run it on your local machine with builtin server as follows:
 
 ```txt
-$ php -S 0.0.0.0:9999
+$ php -S 0.0.0.0:9999 &
 ```
 
 ### client-side
@@ -193,18 +197,11 @@ that you can run from the CLI as follows:
 $ python3 chupload-client.py ~/some-file.dat || echo FAIL
 ```
 
-To see how it works with an AngularJS
-[module](https://github.com/bfitech/angular-chupload) with
-HTML5 File API under the hood:
+To see how it works on the browser, run the demo:
 
 ```txt
-$ cd /tmp
-$ git clone git@github.com:bfitech/zapchupload.git
-$ cd zapchupload
-$ composer -vvv install -no
-$ bower install
-$ php -S 0.0.0.0:9999 -t tests/htdocs-test &
-$ x-www-browser localhost:9999
+$ php -S 0.0.0.0:9998 -t ./demo &
+$ x-www-browser localhost:9998
 ```
 
 ## Documentation

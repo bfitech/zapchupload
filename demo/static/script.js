@@ -1,6 +1,5 @@
 
 /* global m */
-/* eslint no-undef: "error" */
 
 
 const E_UPLOAD_STARTED = 0x0100;
