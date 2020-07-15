@@ -48,24 +48,19 @@ class Chupload {
 		this.chunkMax = Math.floor(this.file.size / this.chunkSz);
 		this.chunkIndex = 0;
 
-		this._hash();
+		this.send();
 	}
 
-	_hash() {
+	async send() {
 		const bgn = this.chunkSz * this.chunkIndex;
 		const end = bgn + this.chunkSz;
 		const blob = this.file.slice(bgn, end);
 
-		blob.arrayBuffer().then(msg => {
-			crypto.subtle.digest('SHA-256', msg).then(buf => {
-				const sum = Array.from(new Uint8Array(buf)).
-					map(b => b.toString(16).padStart(2, '0')).join('');
-				this._send(blob, sum);
-			});
-		});
-	}
+		const abuf = await blob.arrayBuffer();
+		const ubuf = await crypto.subtle.digest('SHA-256', abuf);
+		const sum = Array.from(new Uint8Array(ubuf)).
+			map(b => b.toString(16).padStart(2, '0')).join('');
 
-	_send(blob, sum) {
 		const form = new FormData();
 		const pfx = this.postPrefix;
 		form.append(pfx + 'name', this.file.name);
@@ -104,7 +99,7 @@ class Chupload {
 			this.cbProgress(this.progress);
 
 			// continue to next chunk
-			this._hash();
+			this.send();
 		}).catch(resp => {
 			this.cbError(resp.response);
 		});
